@@ -1,4 +1,4 @@
-﻿#include "headdot.h"
+#include "headdot.h"
 #include "../../../utility/struct/world2screen.h"
 #include "../../../menu/overlay/settings.h"
 

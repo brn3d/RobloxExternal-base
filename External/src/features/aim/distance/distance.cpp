@@ -1,4 +1,4 @@
-﻿#include "distance.h"
+#include "distance.h"
 #include "../../../menu/overlay/settings.h"
 
 namespace thenwefuckin::aim::distance

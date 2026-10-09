@@ -130,11 +130,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\app\app.h" />
+    <ClInclude Include="src\app\session.h" />
+    <ClInclude Include="src\app\frame.h" />
     <ClInclude Include="src\menu\core\gui\menu.h" />
     <ClInclude Include="src\menu\core\gui\resources\font.h" />
     <ClInclude Include="src\menu\core\gui\resources\icons.h" />
     <ClInclude Include="src\menu\core\overlay\overlay.h" />
-    <ClInclude Include="src\menu\overlay\overlay.h" />
     <ClInclude Include="src\menu\overlay\settings.h" />
     <ClInclude Include="src\menu\resources\font.h" />
     <ClInclude Include="src\menu\resources\verdana.h" />
@@ -179,9 +181,16 @@
     <ClInclude Include="src\features\visual\skeleton\skeleton.h" />
     <ClInclude Include="src\features\visual\preview\player_preview.h" />
     <ClInclude Include="src\features\visual\tracer\tracer.h" />
+    <ClInclude Include="src\features\visual\world\common.h" />
+    <ClInclude Include="src\features\visual\world\ore.h" />
+    <ClInclude Include="src\features\visual\world\plants.h" />
+    <ClInclude Include="src\features\visual\world\bots.h" />
+    <ClInclude Include="src\features\visual\world\animals.h" />
+    <ClInclude Include="src\features\visual\world\tools.h" />
+    <ClInclude Include="src\features\visual\world\crates.h" />
+    <ClInclude Include="src\features\visual\world\keycards.h" />
     <ClInclude Include="src\utility\cache\math.h" />
-    <ClInclude Include="src\utility\cache\sdk.h" />
-    <ClInclude Include="src\utility\cache\pf_cache.h" />
+    <ClInclude Include="src\utility\cache\cache.h" />
     <ClInclude Include="src\utility\memory\syscall.h" />
     <ClInclude Include="src\utility\struct\offsets.h" />
     <ClInclude Include="src\utility\struct\structs.h" />
@@ -192,6 +201,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="src\app\app.cpp" />
+    <ClCompile Include="src\app\session.cpp" />
+    <ClCompile Include="src\app\frame.cpp" />
     <ClCompile Include="src\menu\core\overlay\overlay.cpp" />
     <ClCompile Include="src\menu\imgui\imgui.cpp" />
     <ClCompile Include="src\menu\imgui\imgui_demo.cpp" />
@@ -232,6 +244,13 @@
     <ClCompile Include="src\features\visual\oof\oof.cpp" />
     <ClCompile Include="src\features\visual\skeleton\skeleton.cpp" />
     <ClCompile Include="src\features\visual\tracer\tracer.cpp" />
+    <ClCompile Include="src\features\visual\world\ore.cpp" />
+    <ClCompile Include="src\features\visual\world\plants.cpp" />
+    <ClCompile Include="src\features\visual\world\bots.cpp" />
+    <ClCompile Include="src\features\visual\world\animals.cpp" />
+    <ClCompile Include="src\features\visual\world\tools.cpp" />
+    <ClCompile Include="src\features\visual\world\crates.cpp" />
+    <ClCompile Include="src\features\visual\world\keycards.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Masm Include="src\utility\memory\rax.asm" Condition="'$(Platform)'=='x64'" />

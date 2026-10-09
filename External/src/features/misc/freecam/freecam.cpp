@@ -1,5 +1,5 @@
 #include "freecam.h"
-#include "../../../utility/cache/sdk.h"
+#include "../../../utility/cache/cache.h"
 #include "../../../utility/global/globals.h"
 #include "../../../menu/overlay/settings.h"
 #include "../../../menu/core/gui/menu.h"
@@ -364,21 +364,14 @@ namespace thenwefuckin::misc::freecam
 
         if (canInput)
         {
-            int cx = GetSystemMetrics(SM_CXSCREEN) / 2;
-            int cy = GetSystemMetrics(SM_CYSCREEN) / 2;
-            POINT cur{};
-            if (GetCursorPos(&cur))
+            long rdx = 0, rdy = 0;
+            Overlay::ConsumeMouseDelta(rdx, rdy);
+            if (rdx != 0 || rdy != 0)
             {
-                float dx = static_cast<float>(cur.x - cx);
-                float dy = static_cast<float>(cur.y - cy);
-                if (dx != 0.0f || dy != 0.0f)
-                {
-                    float sens = std::clamp(settings::freecam_sensitivity, 0.0005f, 0.01f);
-                    s_yaw += dx * sens;
-                    s_pitch -= dy * sens;
-                    s_pitch = std::clamp(s_pitch, -1.5f, 1.5f);
-                }
-                SetCursorPos(cx, cy);
+                float sens = std::clamp(settings::freecam_sensitivity, 0.0005f, 0.01f) * 0.25f;
+                s_yaw += static_cast<float>(rdx) * sens;
+                s_pitch -= static_cast<float>(rdy) * sens;
+                s_pitch = std::clamp(s_pitch, -1.5f, 1.5f);
             }
 
             float fwdIn = 0.0f, sideIn = 0.0f, upIn = 0.0f;

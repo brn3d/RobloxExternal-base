@@ -56,6 +56,7 @@ public:
     static void ToggleMenu();
     static void SetMenuOpen(bool open);
     static void SetFrameInterval(float seconds);
+    static void ConsumeMouseDelta(long& dx, long& dy);
 
     static void SetRenderEnabled(bool on) { s_renderEnabled = on; }
 

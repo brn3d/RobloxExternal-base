@@ -1,4 +1,4 @@
-﻿#include "aim.h"
+#include "aim.h"
 #include "../mouse/mouse.h"
 #include "../viewport/viewport.h"
 #include "../raycast/raycast.h"

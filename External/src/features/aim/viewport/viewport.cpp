@@ -4,7 +4,7 @@
 #include "../tracking/tracking.h"
 #include "../health/health.h"
 #include "../distance/distance.h"
-#include "../../../utility/cache/sdk.h"
+#include "../../../utility/cache/cache.h"
 #include "../../../utility/struct/world2screen.h"
 #include "../../../utility/struct/offsets.h"
 #include "../../../menu/overlay/settings.h"
@@ -86,20 +86,30 @@ namespace thenwefuckin::aim::viewport
             return { (std::int16_t)std::lround(vx), (std::int16_t)std::lround(vy) };
         }
 
+        HWND s_hwnd = nullptr;
+        float s_cw = 0.f, s_ch = 0.f;
+        std::chrono::steady_clock::time_point s_lastWnd{};
+
         bool get_mouse_in_viewport(float dw, float dh, float& mx, float& my)
         {
-            HWND hwnd = FindWindowW(nullptr, L"Roblox");
-            if (!hwnd || !IsWindow(hwnd)) return false;
+            auto now = std::chrono::steady_clock::now();
+            if (!s_hwnd || !IsWindow(s_hwnd) ||
+                std::chrono::duration_cast<std::chrono::milliseconds>(now - s_lastWnd).count() >= 2000)
+            {
+                s_lastWnd = now;
+                s_hwnd = FindWindowW(nullptr, L"Roblox");
+                if (!s_hwnd || !IsWindow(s_hwnd)) return false;
+                RECT cr{};
+                if (!GetClientRect(s_hwnd, &cr)) { s_hwnd = nullptr; return false; }
+                s_cw = (float)(cr.right - cr.left);
+                s_ch = (float)(cr.bottom - cr.top);
+                if (s_cw < 1.f || s_ch < 1.f) { s_hwnd = nullptr; return false; }
+            }
             POINT pt{};
-            if (!GetCursorPos(&pt) || !ScreenToClient(hwnd, &pt)) return false;
-            RECT cr{};
-            if (!GetClientRect(hwnd, &cr)) return false;
-            float cw = (float)(cr.right - cr.left);
-            float ch = (float)(cr.bottom - cr.top);
-            if (cw < 1.f || ch < 1.f) return false;
-            if (pt.x < 0 || pt.y < 0 || pt.x >= cr.right || pt.y >= cr.bottom) return false;
-            mx = (float)pt.x * (dw / cw);
-            my = (float)pt.y * (dh / ch);
+            if (!GetCursorPos(&pt) || !ScreenToClient(s_hwnd, &pt)) return false;
+            if (pt.x < 0 || pt.y < 0 || pt.x >= (LONG)s_cw || pt.y >= (LONG)s_ch) return false;
+            mx = (float)pt.x * (dw / s_cw);
+            my = (float)pt.y * (dh / s_ch);
             if (mx > dw - 1.f) mx = dw - 1.f;
             if (mx < 1.f) mx = 1.f;
             if (my > dh - 1.f) my = dh - 1.f;
@@ -148,7 +158,7 @@ namespace thenwefuckin::aim::viewport
 
         DWORD WINAPI writer_thread(LPVOID)
         {
-            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
             bool on = false;
             while (!g_stop.load(std::memory_order_acquire))
             {
@@ -167,10 +177,14 @@ namespace thenwefuckin::aim::viewport
                 Vec2i16 v{};
                 if (compute(v))
                 {
+                    Vec2i16 cur = g_proc ? g_proc->read<Vec2i16>(g_cam + Offsets::Camera::ViewportInt16) : Vec2i16{};
+                    if (cur.x != v.x || cur.y != v.y)
+                        write_viewport(g_cam, v);
+                    else
+                        g_spoofed.store(true, std::memory_order_release);
                     g_last = v;
                     g_fails = 0;
                     on = true;
-                    write_viewport(g_cam, g_last);
                 }
                 else if (on && g_fails < 40)
                 {
@@ -184,7 +198,7 @@ namespace thenwefuckin::aim::viewport
                     on = false;
                     g_fails = 0;
                 }
-                Sleep(1);
+                Sleep(2);
             }
             restore_viewport();
             g_spoofed.store(false, std::memory_order_release);
@@ -197,7 +211,7 @@ namespace thenwefuckin::aim::viewport
             g_stop.store(false, std::memory_order_release);
             g_thread = CreateThread(nullptr, 0, &writer_thread, nullptr, 0, nullptr);
             if (g_thread)
-                SetThreadPriority(g_thread, THREAD_PRIORITY_HIGHEST);
+                SetThreadPriority(g_thread, THREAD_PRIORITY_NORMAL);
         }
 
         void set_target(const math::vec3& world)

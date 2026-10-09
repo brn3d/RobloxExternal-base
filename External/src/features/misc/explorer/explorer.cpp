@@ -3,7 +3,7 @@
 #endif
 #include "explorer.h"
 #include "../../../menu/core/gui/menu.h"
-#include "../../../utility/cache/sdk.h"
+#include "../../../utility/cache/cache.h"
 #include "../../../utility/logger/logger.h"
 #include "../../../utility/stb/stb_image.h"
 #include "../../../utility/struct/offsets.h"

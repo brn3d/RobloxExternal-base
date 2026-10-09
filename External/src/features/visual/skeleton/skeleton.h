@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "../../../utility/cache/math.h"
 
 namespace thenwefuckin::visual::skeleton

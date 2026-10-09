@@ -1,4 +1,4 @@
-﻿#include "health.h"
+#include "health.h"
 #include "../../../menu/overlay/settings.h"
 
 namespace thenwefuckin::aim::health

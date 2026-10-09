@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "../../../menu/imgui/imgui.h"
 
 namespace thenwefuckin::visual

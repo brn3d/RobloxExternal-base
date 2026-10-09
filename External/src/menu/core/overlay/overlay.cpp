@@ -300,7 +300,22 @@ bool Overlay::CreateOverlayWindow()
     DwmEnableBlurBehindWindow(m_hwnd, &bb);
     ShowWindow(m_hwnd, SW_SHOW);
     UpdateWindow(m_hwnd);
+    RAWINPUTDEVICE rid{};
+    rid.usUsagePage = 0x01;
+    rid.usUsage = 0x02;
+    rid.dwFlags = RIDEV_INPUTSINK;
+    rid.hwndTarget = m_hwnd;
+    RegisterRawInputDevices(&rid, 1, sizeof(rid));
     return true;
+}
+
+static std::atomic<long> s_rawDx{ 0 };
+static std::atomic<long> s_rawDy{ 0 };
+
+void Overlay::ConsumeMouseDelta(long& dx, long& dy)
+{
+    dx = s_rawDx.exchange(0, std::memory_order_relaxed);
+    dy = s_rawDy.exchange(0, std::memory_order_relaxed);
 }
 void Overlay::DestroyOverlayWindow()
 {
@@ -472,6 +487,24 @@ LRESULT CALLBACK Overlay::WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
             ForceFocusWindow(hWnd);
         }
         break;
+    case WM_INPUT:
+    {
+        UINT sz = 0;
+        if (GetRawInputData(reinterpret_cast<HRAWINPUT>(lParam), RID_INPUT, nullptr, &sz, sizeof(RAWINPUTHEADER)) == 0 && sz >= sizeof(RAWINPUTHEADER))
+        {
+            BYTE buf[sizeof(RAWINPUT)];
+            if (GetRawInputData(reinterpret_cast<HRAWINPUT>(lParam), RID_INPUT, buf, &sz, sizeof(RAWINPUTHEADER)) == sz)
+            {
+                const RAWINPUT* ri = reinterpret_cast<const RAWINPUT*>(buf);
+                if (ri->header.dwType == RIM_TYPEMOUSE)
+                {
+                    s_rawDx.fetch_add(ri->data.mouse.lLastX, std::memory_order_relaxed);
+                    s_rawDy.fetch_add(ri->data.mouse.lLastY, std::memory_order_relaxed);
+                }
+            }
+        }
+        break;
+    }
     case WM_SIZE:
         if (ov && ov->m_device && wParam != SIZE_MINIMIZED)
         {
@@ -703,4 +736,44 @@ void Overlay::SetStreamProof(bool enabled)
     m_streamProof = enabled;
     DWORD affinity = enabled ? WDA_EXCLUDEFROMCAPTURE : 0;
     SetWindowDisplayAffinity(m_hwnd, affinity);
+}
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "../../../utility/stb/stb_image.h"
+
+ID3D11ShaderResourceView* Menu::LoadIconTexture(const unsigned char* png, int len)
+{
+    int tw = 0;
+    int th = 0;
+    unsigned char* px = stbi_load_from_memory(png, len, &tw, &th, nullptr, 4);
+    if (!px || tw <= 0 || th <= 0)
+    {
+        if (px) stbi_image_free(px);
+        return nullptr;
+    }
+    ID3D11ShaderResourceView* srv = nullptr;
+    ID3D11Device* dev = Overlay::GetDeviceStatic();
+    if (dev)
+    {
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = (UINT)tw;
+        desc.Height = (UINT)th;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        D3D11_SUBRESOURCE_DATA init = {};
+        init.pSysMem = px;
+        init.SysMemPitch = (UINT)(tw * 4);
+        ID3D11Texture2D* tex = nullptr;
+        if (SUCCEEDED(dev->CreateTexture2D(&desc, &init, &tex)))
+        {
+            dev->CreateShaderResourceView(tex, nullptr, &srv);
+            tex->Release();
+        }
+    }
+    stbi_image_free(px);
+    return srv;
 }

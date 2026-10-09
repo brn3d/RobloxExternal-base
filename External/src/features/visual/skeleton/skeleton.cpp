@@ -1,4 +1,4 @@
-﻿#include "skeleton.h"
+#include "skeleton.h"
 #include "../../../utility/struct/world2screen.h"
 
 namespace thenwefuckin::visual::skeleton

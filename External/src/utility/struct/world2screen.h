@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "../cache/math.h"
 
 namespace thenwefuckin::projection

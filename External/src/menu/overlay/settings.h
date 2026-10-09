@@ -184,6 +184,86 @@ namespace thenwefuckin::settings
     inline bool  world_exposure_enabled = false;
     inline float world_exposure_value = 0.0f;
 
+    inline bool  world_ore_enabled = false;
+    inline int   world_ore_key = 0;
+    inline int   world_ore_key_mode = 2;
+    inline bool  world_ore_stone = true;
+    inline bool  world_ore_phosphate = true;
+    inline bool  world_ore_metal = true;
+    inline bool  world_ore_name[3] = { true, true, true };
+    inline bool  world_ore_dist[3] = { true, true, true };
+    inline float world_ore_stone_color[4] = { 0.6f, 0.6f, 0.6f, 1.0f };
+    inline float world_ore_phosphate_color[4] = { 1.0f, 0.85f, 0.2f, 1.0f };
+    inline float world_ore_metal_color[4] = { 0.8f, 0.4f, 0.2f, 1.0f };
+    inline bool  world_plant_enabled = false;
+    inline int   world_plant_key = 0;
+    inline int   world_plant_key_mode = 2;
+    inline bool  world_plant_name[7] = { true, true, true, true, true, true, true };
+    inline bool  world_plant_dist[7] = { true, true, true, true, true, true, true };
+    inline bool  world_bots_enabled = false;
+    inline int   world_bots_key = 0;
+    inline int   world_bots_key_mode = 2;
+    inline bool  world_bots_sel[3] = { true, true, true };
+    inline float world_bots_color[3][4] = {
+        { 1.0f, 0.3f, 0.3f, 1.0f }, { 1.0f, 0.3f, 0.3f, 1.0f },
+        { 1.0f, 0.3f, 0.3f, 1.0f }
+    };
+    inline bool  world_bots_box[3] = { true, true, true };
+    inline bool  world_bots_name[3] = { true, true, true };
+    inline bool  world_bots_dist[3] = { true, true, true };
+    inline bool  world_animals_enabled = false;
+    inline int   world_animals_key = 0;
+    inline int   world_animals_key_mode = 2;
+    inline bool  world_animals_sel[3] = { true, true, true };
+    inline float world_animals_color[3][4] = {
+        { 0.6f, 0.8f, 0.6f, 1.0f }, { 0.8f, 0.6f, 0.4f, 1.0f },
+        { 0.7f, 0.7f, 0.7f, 1.0f }
+    };
+    inline bool  world_animals_name[3] = { true, true, true };
+    inline bool  world_animals_dist[3] = { true, true, true };
+    inline bool  world_keycards_enabled = false;
+    inline int   world_keycards_key = 0;
+    inline int   world_keycards_key_mode = 2;
+    inline bool  world_keycards_sel[5] = { true, true, true, true, true };
+    inline float world_keycards_color[5][4] = {
+        { 1.0f, 1.0f, 0.2f, 1.0f }, { 0.7f, 0.3f, 1.0f, 1.0f },
+        { 1.0f, 0.2f, 0.2f, 1.0f }, { 1.0f, 0.4f, 0.8f, 1.0f },
+        { 0.8f, 0.8f, 0.8f, 1.0f }
+    };
+    inline bool  world_keycards_name[5] = { true, true, true, true, true };
+    inline bool  world_keycards_dist[5] = { true, true, true, true, true };
+    inline bool  world_tools_enabled = false;
+    inline int   world_tools_key = 0;
+    inline int   world_tools_key_mode = 2;
+    inline bool  world_tools_sel[7] = { true, true, true, true, true, true, true };
+    inline float world_tools_color[7][4] = {
+        { 0.6f, 0.8f, 1.0f, 1.0f }, { 0.6f, 0.8f, 1.0f, 1.0f },
+        { 0.6f, 0.8f, 1.0f, 1.0f }, { 0.6f, 0.8f, 1.0f, 1.0f },
+        { 0.6f, 0.8f, 1.0f, 1.0f }, { 0.6f, 0.8f, 1.0f, 1.0f },
+        { 0.6f, 0.8f, 1.0f, 1.0f }
+    };
+    inline bool  world_tools_name[7] = { true, true, true, true, true, true, true };
+    inline bool  world_tools_dist[7] = { true, true, true, true, true, true, true };
+    inline bool  world_crates_enabled = false;
+    inline int   world_crates_key = 0;
+    inline int   world_crates_key_mode = 2;
+    inline bool  world_crates_sel[8] = { true, true, true, true, true, true, true, true };
+    inline float world_crates_color[8][4] = {
+        { 1.0f, 0.8f, 0.3f, 1.0f }, { 0.6f, 1.0f, 0.6f, 1.0f },
+        { 0.75f, 0.55f, 0.35f, 1.0f }, { 0.9f, 0.7f, 0.4f, 1.0f },
+        { 0.6f, 0.65f, 0.7f, 1.0f }, { 0.55f, 0.55f, 0.6f, 1.0f },
+        { 1.0f, 0.5f, 0.2f, 1.0f }, { 0.8f, 0.4f, 0.4f, 1.0f }
+    };
+    inline bool  world_crates_name[8] = { true, true, true, true, true, true, true, true };
+    inline bool  world_crates_dist[8] = { true, true, true, true, true, true, true, true };
+    inline bool  world_plant_sel[7] = { true, true, true, true, true, true, true };
+    inline float world_plant_color[7][4] = {
+        { 0.85f, 0.85f, 0.85f, 1.0f }, { 0.3f, 0.5f, 1.0f, 1.0f },
+        { 1.0f, 0.2f, 0.3f, 1.0f }, { 1.0f, 1.0f, 0.3f, 1.0f },
+        { 1.0f, 0.85f, 0.2f, 1.0f }, { 1.0f, 0.5f, 0.1f, 1.0f },
+        { 1.0f, 0.3f, 0.3f, 1.0f }
+    };
+
     inline void disable_all()
     {
         box_enabled = false;
@@ -224,6 +304,13 @@ namespace thenwefuckin::settings
         time_enabled = false;
         world_fog_enabled = false;
         world_exposure_enabled = false;
+        world_ore_enabled = false;
+        world_plant_enabled = false;
+        world_bots_enabled = false;
+        world_animals_enabled = false;
+        world_tools_enabled = false;
+        world_crates_enabled = false;
+        world_keycards_enabled = false;
     }
 
     inline struct SavedFeatures
@@ -267,6 +354,13 @@ namespace thenwefuckin::settings
         bool time = false;
         bool world_fog = false;
         bool world_exposure = false;
+        bool world_ore = false;
+        bool world_plant = false;
+        bool world_bots = false;
+        bool world_animals = false;
+        bool world_keycards = false;
+        bool world_tools = false;
+        bool world_crates = false;
     } saved;
 
     inline void push_state()
@@ -311,6 +405,13 @@ namespace thenwefuckin::settings
         saved.time = time_enabled;
         saved.world_fog = world_fog_enabled;
         saved.world_exposure = world_exposure_enabled;
+        saved.world_ore = world_ore_enabled;
+        saved.world_plant = world_plant_enabled;
+        saved.world_bots = world_bots_enabled;
+        saved.world_animals = world_animals_enabled;
+        saved.world_keycards = world_keycards_enabled;
+        saved.world_tools = world_tools_enabled;
+        saved.world_crates = world_crates_enabled;
     }
 
     inline bool restore_state()
@@ -322,7 +423,9 @@ namespace thenwefuckin::settings
             || saved.aim_show_fov || saved.aim_autoshoot || saved.aim_tracer
             || saved.walkspeed || saved.jumppower || saved.fov || saved.noclip
             || saved.freecam || saved.hipheight || saved.infjump || saved.hitsound
-            || saved.time || saved.world_fog || saved.world_exposure;
+            || saved.time || saved.world_fog || saved.world_exposure
+            || saved.world_ore || saved.world_plant || saved.world_bots
+            || saved.world_animals || saved.world_tools || saved.world_crates || saved.world_keycards;
         box_enabled = box_enabled || saved.box;
         skeleton_enabled = skeleton_enabled || saved.skeleton;
         health_enabled = health_enabled || saved.health;
@@ -361,6 +464,13 @@ namespace thenwefuckin::settings
         time_enabled = time_enabled || saved.time;
         world_fog_enabled = world_fog_enabled || saved.world_fog;
         world_exposure_enabled = world_exposure_enabled || saved.world_exposure;
+        world_ore_enabled = world_ore_enabled || saved.world_ore;
+        world_plant_enabled = world_plant_enabled || saved.world_plant;
+        world_bots_enabled = world_bots_enabled || saved.world_bots;
+        world_animals_enabled = world_animals_enabled || saved.world_animals;
+        world_keycards_enabled = world_keycards_enabled || saved.world_keycards;
+        world_tools_enabled = world_tools_enabled || saved.world_tools;
+        world_crates_enabled = world_crates_enabled || saved.world_crates;
         saved.valid = false;
         return any;
     }

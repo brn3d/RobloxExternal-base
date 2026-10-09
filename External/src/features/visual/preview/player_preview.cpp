@@ -1,6 +1,6 @@
 #define NOMINMAX
 #include "player_preview.h"
-#include "../../../utility/cache/sdk.h"
+#include "../../../utility/cache/cache.h"
 #include "../../../utility/stb/stb_image.h"
 #include "../../../menu/core/gui/menu.h"
 #include "../../../menu/core/overlay/overlay.h"
@@ -8,6 +8,7 @@
 #include "../health/health.h"
 #include "../../../menu/overlay/settings.h"
 #include "../../../menu/resources/font.h"
+#include "../../../utility/cache/cache.h"
 #include <windows.h>
 #include <wininet.h>
 #include <d3d11.h>
@@ -288,40 +289,6 @@ namespace thenwefuckin::visual::preview
             }
         };
 
-        struct V3 { float x, y, z; };
-        struct V2 { float x, y; };
-        struct GpuVertex { V3 p; V3 n; V2 t; };
-        struct FrameConsts
-        {
-            DirectX::XMMATRIX w;
-            DirectX::XMMATRIX v;
-            DirectX::XMMATRIX pr;
-            DirectX::XMFLOAT4 tint;
-            float textured;
-            float pad[3];
-        };
-        struct Surface
-        {
-            std::string tag;
-            V3 base{ 1, 1, 1 };
-            std::string tex;
-        };
-        struct BakedMesh
-        {
-            std::string tag;
-            std::vector<GpuVertex> verts;
-            std::vector<uint32_t> idx;
-        };
-        struct LiveMesh
-        {
-            ID3D11Buffer* vb = nullptr;
-            ID3D11Buffer* ib = nullptr;
-            uint32_t count = 0;
-            std::string tag;
-
-            DirectX::XMFLOAT4 tint{ 1, 1, 1, 1 };
-            ID3D11ShaderResourceView* srv = nullptr;
-        };
         struct FaceRef { int p = 0; int t = 0; int n = 0; };
         enum class Phase { Calm, Fetch, Wait, Pull, Bake, Paint, Done, Broke };
 
@@ -587,12 +554,6 @@ namespace thenwefuckin::visual::preview
                 if (!kv.second.verts.empty()) out.push_back(std::move(kv.second));
             return out;
         }
-
-        struct DecodedTex
-        {
-            int w = 0, h = 0;
-            std::vector<unsigned char> px;
-        };
 
         DecodedTex decode_bytes(const std::string& bytes)
         {

@@ -1,6 +1,6 @@
-﻿#pragma once
+#pragma once
 #include "../../../utility/cache/math.h"
-#include "../../../utility/cache/sdk.h"
+#include "../../../utility/cache/cache.h"
 #include <cstdint>
 
 namespace thenwefuckin::aim

@@ -20,8 +20,7 @@
 
 #include "../../../features/misc/explorer/explorer.h"
 #include "../../../features/aim/raycast/raycast.h"
-#include "../../../utility/cache/pf_cache.h"
-#include "../../../utility/cache/sdk.h"
+#include "../../../utility/cache/cache.h"
 namespace S = thenwefuckin::settings;
 namespace Menu
 {
@@ -73,6 +72,12 @@ inline ImVec2 g_bindsSize = ImVec2(160.0f, 20.0f);
 inline bool g_bindsDragging = false;
 inline ImVec2 g_bindsDragOff = ImVec2(0.0f, 0.0f);
 inline bool g_internalDebug = false;
+inline double g_dbgMsRefresh = 0.0;
+inline double g_dbgMsPf = 0.0;
+inline double g_dbgMsMenu = 0.0;
+inline double g_dbgMsAim = 0.0;
+inline double g_dbgMsVisual = 0.0;
+inline double g_dbgMsMisc = 0.0;
 inline ImVec2 g_debugPos = ImVec2(20.0f, 520.0f);
 inline ImVec2 g_debugSize = ImVec2(270.0f, 180.0f);
 inline bool g_debugDragging = false;
@@ -2379,7 +2384,8 @@ enum QuestionItemType
     QITEM_DROPDOWNSINGLE,
     QITEM_COLORPICKER,
     QITEM_COLORPICKER_PAIR,
-    QITEM_KEYBIND
+    QITEM_KEYBIND,
+    QITEM_SUBMENU
 };
 
 struct QuestionItem
@@ -2416,6 +2422,10 @@ struct QuestionItem
 
     int* key_val;
     int* mode_val;
+
+    const QuestionItem* sub_items;
+    int sub_count;
+    bool* open_val;
 };
 
 inline QuestionItem MakeQCheckbox(const char* label, bool* val, bool* cond = nullptr)
@@ -2477,6 +2487,41 @@ inline QuestionItem MakeQCheckboxKeybind(const char* id, const char* label, bool
     it.mode_val = mode;
     it.cond = cond;
     return it;
+}
+
+inline QuestionItem MakeQSubmenu(const char* id, const char* label, const QuestionItem* sub_items, int sub_count, bool* open_val, bool* cond = nullptr)
+{
+    QuestionItem it{};
+    it.type = QITEM_SUBMENU;
+    it.id = id;
+    it.label = label;
+    it.sub_items = sub_items;
+    it.sub_count = sub_count;
+    it.open_val = open_val;
+    it.cond = cond;
+    return it;
+}
+
+inline float QSubmenuContentHeight(const QuestionItem* items, int count)
+{
+    float h = 0.0f;
+    if (!items || count <= 0)
+        return h;
+    for (int i = 0; i < count; ++i)
+    {
+        if (items[i].cond && !*items[i].cond)
+            continue;
+        if (items[i].type == QITEM_CHECKBOX || items[i].type == QITEM_COLORPICKER ||
+            items[i].type == QITEM_COLORPICKER_PAIR || items[i].type == QITEM_KEYBIND)
+            h += 20.0f;
+        else if (items[i].type == QITEM_SLIDER || items[i].type == QITEM_SLIDERF)
+            h += (items[i].label && items[i].label[0] != '\0') ? (kLabeledCtrlH + 4.0f) : 17.0f;
+        else if (items[i].type == QITEM_DROPDOWN || items[i].type == QITEM_DROPDOWNSINGLE)
+            h += (items[i].label && items[i].label[0] != '\0') ? (kLabeledBoxH + 4.0f) : 24.0f;
+        else
+            h += 20.0f;
+    }
+    return h;
 }
 
 inline QuestionItem MakeQSlider(const char* id, const char* label, int* val, int min_v, int max_v, const char* fmt = "%d", bool* cond = nullptr)
@@ -2618,7 +2663,7 @@ struct QuestionOption
         : val(v), label(lbl), col(c1), outline_opt(nullptr), outline_col(nullptr), id(i1), col2(c2), id2(i2), cond(cn) {}
 };
 
-inline bool DrawQuestionButton(const char* id, ImDrawList* dl, ImVec2 right_edge, const QuestionItem* items, int item_count, ImFont* font = nullptr, float font_size = 13.0f)
+inline bool DrawQuestionButton(const char* id, ImDrawList* dl, ImVec2 right_edge, const QuestionItem* items, int item_count, ImFont* font = nullptr, float font_size = 13.0f, int depth = 0)
 {
     ImGuiIO& io = ImGui::GetIO();
     ImVec2 m = io.MousePos;
@@ -2642,7 +2687,8 @@ inline bool DrawQuestionButton(const char* id, ImDrawList* dl, ImVec2 right_edge
 
     bool is_hov = (m.x >= hit_x0 && m.x <= hit_x1 && m.y >= hit_y0 && m.y <= hit_y1);
     bool own_popup = ImGui::IsPopupOpen(popup_id);
-    if ((ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopup) && !own_popup) || g_activeBindId != nullptr)
+    bool sub_any = false;
+    if ((ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopup) && !own_popup && depth == 0) || g_activeBindId != nullptr)
         is_hov = false;
 
     if (is_hov)
@@ -2689,8 +2735,26 @@ inline bool DrawQuestionButton(const char* id, ImDrawList* dl, ImVec2 right_edge
             if (items[i].col_val2 || (items[i].outline_opt && items[i].outline_col))
                 has_picker_pair = true;
         }
+        else if (items[i].type == QITEM_SUBMENU)
+        {
+            has_picker_or_kb = true;
+            if (items[i].col_val)
+                has_picker_pair = true;
+        }
         ImVec2 opt_ts = f->CalcTextSizeA(fs, FLT_MAX, 0.0f, items[i].label ? items[i].label : "");
         if (opt_ts.x > max_label_w) max_label_w = opt_ts.x;
+        if (items[i].type == QITEM_SUBMENU && items[i].sub_items && items[i].sub_count > 0)
+        {
+            for (int k = 0; k < items[i].sub_count; ++k)
+            {
+                const char* sl = items[i].sub_items[k].label;
+                if (!sl || !sl[0])
+                    continue;
+                ImVec2 sts = f->CalcTextSizeA(fs, FLT_MAX, 0.0f, sl);
+                float need = sts.x + 10.0f;
+                if (need > max_label_w) max_label_w = need;
+            }
+        }
 
         bool pair_visible = items[i].type != QITEM_COLORPICKER_PAIR ||
             ((!items[i].cond || *items[i].cond) || (!items[i].cond2 || *items[i].cond2));
@@ -2702,6 +2766,12 @@ inline bool DrawQuestionButton(const char* id, ImDrawList* dl, ImVec2 right_edge
         if (items[i].type == QITEM_CHECKBOX)
         {
             pop_h += 20.0f;
+        }
+        else if (items[i].type == QITEM_SUBMENU)
+        {
+            pop_h += 20.0f;
+            if ((!items[i].cond || *items[i].cond) && items[i].open_val && *items[i].open_val)
+                pop_h += QSubmenuContentHeight(items[i].sub_items, items[i].sub_count);
         }
         else if (items[i].type == QITEM_SLIDER || items[i].type == QITEM_SLIDERF)
         {
@@ -2787,6 +2857,16 @@ inline bool DrawQuestionButton(const char* id, ImDrawList* dl, ImVec2 right_edge
                 is_child_popup_active = true;
                 break;
             }
+            if (items[i].type == QITEM_SUBMENU && items[i].id)
+            {
+                char subpid[64];
+                snprintf(subpid, sizeof(subpid), "##qb_pop_%s", items[i].id);
+                if (ImGui::IsPopupOpen(subpid))
+                {
+                    is_child_popup_active = true;
+                    break;
+                }
+            }
         }
 
         for (int i = 0; i < item_count; i++)
@@ -2829,6 +2909,97 @@ inline bool DrawQuestionButton(const char* id, ImDrawList* dl, ImVec2 right_edge
                     DrawKeybind(items[i].id ? items[i].id : auto_kbid, pdl, ImVec2(w_max.x - pad_x, cb_y), items[i].key_val, items[i].mode_val, f, fs);
                 }
                 cur_y += 20.0f;
+            }
+            else if (items[i].type == QITEM_SUBMENU)
+            {
+                float row_y = floorf(cur_y + (20.0f - 14.0f) * 0.5f);
+                if (items[i].bool_val)
+                {
+                    DrawCheckbox(pdl, ImVec2(w_min.x + pad_x, row_y), items[i].bool_val, items[i].label, f, fs, !is_child_popup_active);
+                }
+                else if (items[i].label && items[i].label[0] != '\0')
+                {
+                    DrawOutlinedText(pdl, f, fs, ImVec2(w_min.x + pad_x, row_y), TextU32(), border_dark, items[i].label);
+                }
+                bool is_open = items[i].open_val && *items[i].open_val;
+                const char* tg_text = is_open ? "[ - ]" : "[ + ]";
+                ImVec2 tg_sz = f->CalcTextSizeA(fs, FLT_MAX, 0.0f, tg_text);
+                float sw_right = floorf(w_max.x - pad_x);
+                float tg_right = sw_right;
+                if (items[i].col_val)
+                    tg_right = floorf(sw_right - 14.0f - 6.0f);
+                float tg_x = floorf(tg_right - tg_sz.x);
+                float tg_y = floorf(row_y + (14.0f - tg_sz.y) * 0.5f);
+                bool tg_hov = (m.x >= tg_x - 3.0f && m.x <= tg_right + 3.0f && tg_y - 2.0f <= m.y && m.y <= tg_y + 16.0f);
+                if (is_child_popup_active || g_activeBindId != nullptr)
+                    tg_hov = false;
+                if (tg_hov)
+                {
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                    if (ImGui::IsMouseClicked(0) && items[i].open_val)
+                        *items[i].open_val = !*items[i].open_val;
+                }
+                DrawOutlinedText(pdl, f, fs, ImVec2(tg_x, tg_y), tg_hov ? TextU32() : TextDimU32(), border_dark, tg_text);
+                if (items[i].col_val)
+                {
+                    char auto_subcp[64];
+                    snprintf(auto_subcp, sizeof(auto_subcp), "##q_subcp_%s", items[i].id ? items[i].id : "qb");
+                    DrawColorPicker(auto_subcp, pdl, ImVec2(sw_right - 14.0f, row_y), ImVec2(14.0f, 14.0f), items[i].col_val, items[i].outline_opt, items[i].outline_col);
+                }
+                cur_y += 20.0f;
+                if (is_open && items[i].sub_items && items[i].sub_count > 0)
+                {
+                    int tl_rows = 0;
+                    for (int c = 0; c < items[i].sub_count; ++c)
+                    {
+                        const QuestionItem& s = items[i].sub_items[c];
+                        if (s.cond && !*s.cond)
+                            continue;
+                        if (s.type == QITEM_CHECKBOX || s.type == QITEM_COLORPICKER)
+                            ++tl_rows;
+                    }
+                    if (tl_rows > 0)
+                    {
+                        float tl_x = floorf(w_min.x + pad_x + 10.0f - 6.0f);
+                        float tl_top = floorf(cur_y + 3.0f);
+                        float tl_bot = floorf(cur_y + (float)(tl_rows - 1) * 20.0f + 17.0f);
+                        pdl->AddLine(ImVec2(tl_x - 2.0f, tl_top), ImVec2(tl_x - 2.0f, tl_bot), border_dark, 1.0f);
+                        pdl->AddLine(ImVec2(tl_x, tl_top), ImVec2(tl_x, tl_bot), IM_COL32(0x70, 0x60, 0x80, 255), 2.0f);
+                        pdl->AddLine(ImVec2(tl_x + 2.0f, tl_top), ImVec2(tl_x + 2.0f, tl_bot), border_dark, 1.0f);
+                    }
+                    for (int k = 0; k < items[i].sub_count; ++k)
+                    {
+                        const QuestionItem& sub = items[i].sub_items[k];
+                        if (sub.cond && !*sub.cond)
+                            continue;
+                        if (sub.type == QITEM_CHECKBOX)
+                        {
+                            float scb_y = floorf(cur_y + (20.0f - 14.0f) * 0.5f);
+                            DrawCheckbox(pdl, ImVec2(w_min.x + pad_x + 10.0f, scb_y), sub.bool_val, sub.label, f, fs, !is_child_popup_active);
+                            if (sub.col_val)
+                            {
+                                char auto_scp[64];
+                                snprintf(auto_scp, sizeof(auto_scp), "##q_scp_%s_%d", items[i].id ? items[i].id : "qb", k);
+                                const char* scp_id = sub.id ? sub.id : auto_scp;
+                                DrawColorPicker(scp_id, pdl, ImVec2(w_max.x - pad_x - 14.0f, scb_y), ImVec2(14.0f, 14.0f), sub.col_val, sub.outline_opt, sub.outline_col);
+                            }
+                            cur_y += 20.0f;
+                        }
+                        else if (sub.type == QITEM_COLORPICKER)
+                        {
+                            float scp_y = floorf(cur_y + (20.0f - 14.0f) * 0.5f);
+                            if (sub.label && sub.label[0] != '\0')
+                            {
+                                DrawOutlinedText(pdl, f, fs, ImVec2(w_min.x + pad_x + 10.0f, scp_y), TextU32(), border_dark, sub.label);
+                            }
+                            char auto_scp[64];
+                            snprintf(auto_scp, sizeof(auto_scp), "##q_scpp_%s_%d", items[i].id ? items[i].id : "qb", k);
+                            const char* scp_id = sub.id ? sub.id : auto_scp;
+                            DrawColorPicker(scp_id, pdl, ImVec2(w_max.x - pad_x - 14.0f, scp_y), ImVec2(14.0f, 14.0f), sub.col_val, sub.outline_opt, sub.outline_col);
+                            cur_y += 20.0f;
+                        }
+                    }
+                }
             }
             else if (items[i].type == QITEM_SLIDER)
             {
@@ -2926,7 +3097,7 @@ inline bool DrawQuestionButton(const char* id, ImDrawList* dl, ImVec2 right_edge
     ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(2);
 
-    return is_hov || own_popup;
+    return is_hov || own_popup || sub_any;
 }
 
 inline bool DrawQuestionButton(const char* id, ImDrawList* dl, ImVec2 right_edge, QuestionOption* options, int option_count, ImFont* font = nullptr, float font_size = 13.0f)
@@ -3222,6 +3393,13 @@ inline void RenderKeybinds(ImDrawList* dl, int width, int height)
     push_bind("##freecam_key", "Freecam", S::freecam_enabled, S::freecam_key, S::freecam_key_mode);
     push_bind("##hipheight_key", "Hip height", S::hipheight_enabled, S::hipheight_key, S::hipheight_key_mode);
     push_bind("##infjump_key", "Infinite jump", S::infjump_enabled, S::infjump_key, S::infjump_key_mode);
+    push_bind("##ore_key", "Ores", S::world_ore_enabled, S::world_ore_key, S::world_ore_key_mode);
+    push_bind("##plant_key", "Plants", S::world_plant_enabled, S::world_plant_key, S::world_plant_key_mode);
+    push_bind("##bots_key", "Bots", S::world_bots_enabled, S::world_bots_key, S::world_bots_key_mode);
+    push_bind("##animals_key", "Animals", S::world_animals_enabled, S::world_animals_key, S::world_animals_key_mode);
+    push_bind("##tools_key", "Tools", S::world_tools_enabled, S::world_tools_key, S::world_tools_key_mode);
+    push_bind("##crates_key", "Crates", S::world_crates_enabled, S::world_crates_key, S::world_crates_key_mode);
+    push_bind("##keycards_key", "Keycards", S::world_keycards_enabled, S::world_keycards_key, S::world_keycards_key_mode);
 
     if (!g_menuOpen && count == 0)
     {
@@ -3683,6 +3861,13 @@ inline void RenderInternalDebug(ImDrawList* dl, int width, int height, float fps
     char bfps[64];
     snprintf(bfps, sizeof(bfps), "%.1f", (double)fps);
     rows.push_back({ "Overlay FPS", bfps, TextU32() });
+
+    {
+        char b[96];
+        snprintf(b, sizeof(b), "r:%.2f pf:%.2f m:%.2f a:%.2f v:%.2f x:%.2f",
+            g_dbgMsRefresh, g_dbgMsPf, g_dbgMsMenu, g_dbgMsAim, g_dbgMsVisual, g_dbgMsMisc);
+        rows.push_back({ "Frame ms", b, TextU32() });
+    }
 
     if (thenwefuckin::g_ctx.datamodel)
     {
@@ -4246,11 +4431,19 @@ inline void Render()
         ImVec2 v_left_bot_min = ImVec2(left_min.x, v_left_top_max.y + group_gap_v);
         ImVec2 v_left_bot_max = left_max;
 
+        const float world_h = v_left_bot_max.y - v_left_bot_min.y;
+        const float misc_h = world_h + 40.0f;
+        ImVec2 v_right_bot_max = right_max;
+        ImVec2 v_right_bot_min = ImVec2(right_min.x, right_max.y - misc_h);
+        ImVec2 v_right_top_min = right_min;
+        ImVec2 v_right_top_max = ImVec2(right_max.x, v_right_bot_min.y - group_gap_v);
+
         if (g_activeTab == 1)
         {
             DrawGroupBox(dl, v_left_top_min, v_left_top_max, "visuals", tab_font, 13.0f, col_bg_group, col_highlight, col_outline);
             DrawGroupBox(dl, v_left_bot_min, v_left_bot_max, "world", tab_font, 13.0f, col_bg_group, col_highlight, col_outline);
-            DrawGroupBox(dl, right_min, right_max, "other", tab_font, 13.0f, col_bg_group, col_highlight, col_outline);
+            DrawGroupBox(dl, v_right_top_min, v_right_top_max, "other", tab_font, 13.0f, col_bg_group, col_highlight, col_outline);
+            DrawGroupBox(dl, v_right_bot_min, v_right_bot_max, "misc", tab_font, 13.0f, col_bg_group, col_highlight, col_outline);
         }
         else
         {
@@ -4497,11 +4690,11 @@ inline void Render()
             y += kCheckRowPitch;
 
             y = v_left_bot_min.y + 20.0f;
-            cb_hov |= DrawCheckbox(dl, ImVec2(v_left_bot_min.x + 14.0f, y), &S::time_enabled, "Time changer", tab_font, 13.0f);
+            cb_hov |= DrawCheckbox(dl, ImVec2(v_left_bot_min.x + 14.0f, y), &S::time_enabled, "Shadow changer", tab_font, 13.0f);
             y += kCheckRowPitch;
             if (S::time_enabled)
             {
-                sl_hov |= DrawSliderFloat("##sl_timevalue", dl, ImVec2(v_left_bot_min.x + 14.0f, y), col_avail_w, &S::time_value, 0.0f, 24.0f, "Time", "%.1f", tab_font, 13.0f);
+                sl_hov |= DrawSliderFloat("##sl_timevalue", dl, ImVec2(v_left_bot_min.x + 14.0f, y), col_avail_w, &S::time_value, 0.0f, 24.0f, "Shadow", "%.1f", tab_font, 13.0f);
                 y += 33.0f;
             }
             cb_hov |= DrawCheckbox(dl, ImVec2(v_left_bot_min.x + 14.0f, y), &S::world_fog_enabled, "Fog", tab_font, 13.0f);
@@ -4545,6 +4738,227 @@ inline void Render()
 
             cb_hov |= DrawCheckbox(dl, ImVec2(right_min.x + 14.0f, ry), &S::vis_team_check, "Team check", tab_font, 13.0f);
             ry += kCheckRowPitch;
+
+            float my = v_right_bot_min.y + 20.0f;
+            cb_hov |= DrawCheckbox(dl, ImVec2(v_right_bot_min.x + 14.0f, my), &S::world_ore_enabled, "Ores", tab_font, 13.0f);
+            kb_hov |= DrawKeybind("##ore_key", dl, ImVec2(v_right_bot_max.x - 14.0f, my), &S::world_ore_key, &S::world_ore_key_mode, tab_font, 13.0f);
+            {
+                char ore_kb_buf[64];
+                if (g_activeBindId != nullptr && strcmp(g_activeBindId, "##ore_key") == 0)
+                    snprintf(ore_kb_buf, sizeof(ore_kb_buf), "[ ]");
+                else if (S::world_ore_key == 0)
+                    snprintf(ore_kb_buf, sizeof(ore_kb_buf), "[ . . . ]");
+                else
+                    snprintf(ore_kb_buf, sizeof(ore_kb_buf), "[ %s ]", GetKeyDisplayName(S::world_ore_key));
+                ImFont* ore_qf = tab_font ? tab_font : ImGui::GetFont();
+                ImVec2 ore_kb_sz = ore_qf->CalcTextSizeA(13.0f, FLT_MAX, 0.0f, ore_kb_buf);
+                const char* ore_sub_ids[3] = { "##qb_ore_sub0", "##qb_ore_sub1", "##qb_ore_sub2" };
+                const char* ore_labels[3] = { "STONE", "PHOSPHATE", "METAL" };
+                static bool s_oreSubOpen[3] = { false, false, false };
+                QuestionItem ore_sub[3][2];
+                for (int i = 0; i < 3; ++i)
+                {
+                    ore_sub[i][0] = MakeQCheckbox("NAME", &S::world_ore_name[i]);
+                    ore_sub[i][1] = MakeQCheckbox("DIST", &S::world_ore_dist[i]);
+                }
+                QuestionItem ore_items[3];
+                for (int i = 0; i < 3; ++i)
+                {
+                    ore_items[i] = MakeQSubmenu(ore_sub_ids[i], ore_labels[i], ore_sub[i], 2, &s_oreSubOpen[i]);
+                    ore_items[i].bool_val = (i == 0) ? &S::world_ore_stone : (i == 1) ? &S::world_ore_phosphate : &S::world_ore_metal;
+                    ore_items[i].col_val = reinterpret_cast<ImVec4*>((i == 0) ? S::world_ore_stone_color : (i == 1) ? S::world_ore_phosphate_color : S::world_ore_metal_color);
+                }
+                kb_hov |= DrawQuestionButton("##qb_ore", dl, ImVec2(v_right_bot_max.x - 14.0f - ore_kb_sz.x - 8.0f, my), ore_items, 3, tab_font, 13.0f);
+            }
+            my += kCheckRowPitch;
+            cb_hov |= DrawCheckbox(dl, ImVec2(v_right_bot_min.x + 14.0f, my), &S::world_plant_enabled, "Plants", tab_font, 13.0f);
+            kb_hov |= DrawKeybind("##plant_key", dl, ImVec2(v_right_bot_max.x - 14.0f, my), &S::world_plant_key, &S::world_plant_key_mode, tab_font, 13.0f);
+            {
+                char plant_kb_buf[64];
+                if (g_activeBindId != nullptr && strcmp(g_activeBindId, "##plant_key") == 0)
+                    snprintf(plant_kb_buf, sizeof(plant_kb_buf), "[ ]");
+                else if (S::world_plant_key == 0)
+                    snprintf(plant_kb_buf, sizeof(plant_kb_buf), "[ . . . ]");
+                else
+                    snprintf(plant_kb_buf, sizeof(plant_kb_buf), "[ %s ]", GetKeyDisplayName(S::world_plant_key));
+                ImFont* plant_qf = tab_font ? tab_font : ImGui::GetFont();
+                ImVec2 plant_kb_sz = plant_qf->CalcTextSizeA(13.0f, FLT_MAX, 0.0f, plant_kb_buf);
+                const char* plant_ids[7] = { "##q_plant0", "##q_plant1", "##q_plant2", "##q_plant3", "##q_plant4", "##q_plant5", "##q_plant6" };
+                const char* plant_labels[7] = { "WOOL", "BLUEBERRY", "RASPBERRY", "LEMON", "CORN", "PUMPKIN", "TOMATO" };
+                const char* plant_sub_ids[7] = { "##qb_plant_sub0", "##qb_plant_sub1", "##qb_plant_sub2", "##qb_plant_sub3", "##qb_plant_sub4", "##qb_plant_sub5", "##qb_plant_sub6" };
+                static bool s_plantSubOpen[7] = { false, false, false, false, false, false, false };
+                QuestionItem plant_sub[7][2];
+                for (int i = 0; i < 7; ++i)
+                {
+                    plant_sub[i][0] = MakeQCheckbox("NAME", &S::world_plant_name[i]);
+                    plant_sub[i][1] = MakeQCheckbox("DIST", &S::world_plant_dist[i]);
+                }
+                QuestionItem plant_items[7];
+                for (int i = 0; i < 7; ++i)
+                {
+                    plant_items[i] = MakeQSubmenu(plant_sub_ids[i], plant_labels[i], plant_sub[i], 2, &s_plantSubOpen[i]);
+                    plant_items[i].bool_val = &S::world_plant_sel[i];
+                    plant_items[i].col_val = reinterpret_cast<ImVec4*>(S::world_plant_color[i]);
+                }
+                kb_hov |= DrawQuestionButton("##qb_plant", dl, ImVec2(v_right_bot_max.x - 14.0f - plant_kb_sz.x - 8.0f, my), plant_items, 7, tab_font, 13.0f);
+            }
+            my += kCheckRowPitch;
+            cb_hov |= DrawCheckbox(dl, ImVec2(v_right_bot_min.x + 14.0f, my), &S::world_bots_enabled, "Bots", tab_font, 13.0f);
+            kb_hov |= DrawKeybind("##bots_key", dl, ImVec2(v_right_bot_max.x - 14.0f, my), &S::world_bots_key, &S::world_bots_key_mode, tab_font, 13.0f);
+            {
+                char bots_kb_buf[64];
+                if (g_activeBindId != nullptr && strcmp(g_activeBindId, "##bots_key") == 0)
+                    snprintf(bots_kb_buf, sizeof(bots_kb_buf), "[ ]");
+                else if (S::world_bots_key == 0)
+                    snprintf(bots_kb_buf, sizeof(bots_kb_buf), "[ . . . ]");
+                else
+                    snprintf(bots_kb_buf, sizeof(bots_kb_buf), "[ %s ]", GetKeyDisplayName(S::world_bots_key));
+                ImFont* bots_qf = tab_font ? tab_font : ImGui::GetFont();
+                ImVec2 bots_kb_sz = bots_qf->CalcTextSizeA(13.0f, FLT_MAX, 0.0f, bots_kb_buf);
+                const char* bots_sub_ids[3] = { "##qb_bots_sub0", "##qb_bots_sub1", "##qb_bots_sub2" };
+                const char* bots_labels[3] = { "BORIS", "BRUTUS", "SOLDIER" };
+                static bool s_botsSubOpen[3] = { false, false, false };
+                QuestionItem bots_sub[3][3];
+                for (int i = 0; i < 3; ++i)
+                {
+                    bots_sub[i][0] = MakeQCheckbox("BOX", &S::world_bots_box[i]);
+                    bots_sub[i][1] = MakeQCheckbox("NAME", &S::world_bots_name[i]);
+                    bots_sub[i][2] = MakeQCheckbox("DIST", &S::world_bots_dist[i]);
+                }
+                QuestionItem bots_items[3];
+                for (int i = 0; i < 3; ++i)
+                {
+                    bots_items[i] = MakeQSubmenu(bots_sub_ids[i], bots_labels[i], bots_sub[i], 3, &s_botsSubOpen[i]);
+                    bots_items[i].bool_val = &S::world_bots_sel[i];
+                    bots_items[i].col_val = reinterpret_cast<ImVec4*>(S::world_bots_color[i]);
+                }
+                kb_hov |= DrawQuestionButton("##qb_bots", dl, ImVec2(v_right_bot_max.x - 14.0f - bots_kb_sz.x - 8.0f, my), bots_items, 3, tab_font, 13.0f);
+            }
+            my += kCheckRowPitch;
+            cb_hov |= DrawCheckbox(dl, ImVec2(v_right_bot_min.x + 14.0f, my), &S::world_animals_enabled, "Animals", tab_font, 13.0f);
+            kb_hov |= DrawKeybind("##animals_key", dl, ImVec2(v_right_bot_max.x - 14.0f, my), &S::world_animals_key, &S::world_animals_key_mode, tab_font, 13.0f);
+            {
+                char animals_kb_buf[64];
+                if (g_activeBindId != nullptr && strcmp(g_activeBindId, "##animals_key") == 0)
+                    snprintf(animals_kb_buf, sizeof(animals_kb_buf), "[ ]");
+                else if (S::world_animals_key == 0)
+                    snprintf(animals_kb_buf, sizeof(animals_kb_buf), "[ . . . ]");
+                else
+                    snprintf(animals_kb_buf, sizeof(animals_kb_buf), "[ %s ]", GetKeyDisplayName(S::world_animals_key));
+                ImFont* animals_qf = tab_font ? tab_font : ImGui::GetFont();
+                ImVec2 animals_kb_sz = animals_qf->CalcTextSizeA(13.0f, FLT_MAX, 0.0f, animals_kb_buf);
+                const char* animals_sub_ids[3] = { "##qb_animals_sub0", "##qb_animals_sub1", "##qb_animals_sub2" };
+                const char* animals_labels[3] = { "DEER", "BOAR", "WOLF" };
+                static bool s_animalsSubOpen[3] = { false, false, false };
+                QuestionItem animals_sub[3][2];
+                for (int i = 0; i < 3; ++i)
+                {
+                    animals_sub[i][0] = MakeQCheckbox("NAME", &S::world_animals_name[i]);
+                    animals_sub[i][1] = MakeQCheckbox("DIST", &S::world_animals_dist[i]);
+                }
+                QuestionItem animals_items[3];
+                for (int i = 0; i < 3; ++i)
+                {
+                    animals_items[i] = MakeQSubmenu(animals_sub_ids[i], animals_labels[i], animals_sub[i], 2, &s_animalsSubOpen[i]);
+                    animals_items[i].bool_val = &S::world_animals_sel[i];
+                    animals_items[i].col_val = reinterpret_cast<ImVec4*>(S::world_animals_color[i]);
+                }
+                kb_hov |= DrawQuestionButton("##qb_animals", dl, ImVec2(v_right_bot_max.x - 14.0f - animals_kb_sz.x - 8.0f, my), animals_items, 3, tab_font, 13.0f);
+            }
+            my += kCheckRowPitch;
+            cb_hov |= DrawCheckbox(dl, ImVec2(v_right_bot_min.x + 14.0f, my), &S::world_tools_enabled, "Tools", tab_font, 13.0f);
+            kb_hov |= DrawKeybind("##tools_key", dl, ImVec2(v_right_bot_max.x - 14.0f, my), &S::world_tools_key, &S::world_tools_key_mode, tab_font, 13.0f);
+            {
+                char tools_kb_buf[64];
+                if (g_activeBindId != nullptr && strcmp(g_activeBindId, "##tools_key") == 0)
+                    snprintf(tools_kb_buf, sizeof(tools_kb_buf), "[ ]");
+                else if (S::world_tools_key == 0)
+                    snprintf(tools_kb_buf, sizeof(tools_kb_buf), "[ . . . ]");
+                else
+                    snprintf(tools_kb_buf, sizeof(tools_kb_buf), "[ %s ]", GetKeyDisplayName(S::world_tools_key));
+                ImFont* tools_qf = tab_font ? tab_font : ImGui::GetFont();
+                ImVec2 tools_kb_sz = tools_qf->CalcTextSizeA(13.0f, FLT_MAX, 0.0f, tools_kb_buf);
+                const char* tools_sub_ids[7] = { "##qb_tools_sub0", "##qb_tools_sub1", "##qb_tools_sub2", "##qb_tools_sub3", "##qb_tools_sub4", "##qb_tools_sub5", "##qb_tools_sub6" };
+                const char* tools_labels[7] = { "CABINET", "SMALL BOX", "LARGE BOX", "ANVIL", "FURNACE", "STORAGE", "BAG" };
+                static bool s_toolsSubOpen[7] = { false, false, false, false, false, false, false };
+                QuestionItem tools_sub[7][2];
+                for (int i = 0; i < 7; ++i)
+                {
+                    tools_sub[i][0] = MakeQCheckbox("NAME", &S::world_tools_name[i]);
+                    tools_sub[i][1] = MakeQCheckbox("DIST", &S::world_tools_dist[i]);
+                }
+                QuestionItem tools_items[7];
+                for (int j = 0; j < 7; ++j)
+                {
+                    tools_items[j] = MakeQSubmenu(tools_sub_ids[j], tools_labels[j], tools_sub[j], 2, &s_toolsSubOpen[j]);
+                    tools_items[j].bool_val = &S::world_tools_sel[j];
+                    tools_items[j].col_val = reinterpret_cast<ImVec4*>(S::world_tools_color[j]);
+                }
+                kb_hov |= DrawQuestionButton("##qb_tools", dl, ImVec2(v_right_bot_max.x - 14.0f - tools_kb_sz.x - 8.0f, my), tools_items, 7, tab_font, 13.0f);
+            }
+            my += kCheckRowPitch;
+            cb_hov |= DrawCheckbox(dl, ImVec2(v_right_bot_min.x + 14.0f, my), &S::world_crates_enabled, "Crates", tab_font, 13.0f);
+            kb_hov |= DrawKeybind("##crates_key", dl, ImVec2(v_right_bot_max.x - 14.0f, my), &S::world_crates_key, &S::world_crates_key_mode, tab_font, 13.0f);
+            {
+                char crates_kb_buf[64];
+                if (g_activeBindId != nullptr && strcmp(g_activeBindId, "##crates_key") == 0)
+                    snprintf(crates_kb_buf, sizeof(crates_kb_buf), "[ ]");
+                else if (S::world_crates_key == 0)
+                    snprintf(crates_kb_buf, sizeof(crates_kb_buf), "[ . . . ]");
+                else
+                    snprintf(crates_kb_buf, sizeof(crates_kb_buf), "[ %s ]", GetKeyDisplayName(S::world_crates_key));
+                ImFont* crates_qf = tab_font ? tab_font : ImGui::GetFont();
+                ImVec2 crates_kb_sz = crates_qf->CalcTextSizeA(13.0f, FLT_MAX, 0.0f, crates_kb_buf);
+                const char* crates_sub_ids[8] = { "##qb_crates_sub0", "##qb_crates_sub1", "##qb_crates_sub2", "##qb_crates_sub3", "##qb_crates_sub4", "##qb_crates_sub5", "##qb_crates_sub6", "##qb_crates_sub7" };
+                const char* crates_labels[8] = { "CARE", "FOOD", "WOODEN", "LOCKED WD", "LOCKED ST", "LOCKED MT", "TIMED", "BRUTUS" };
+                static bool s_cratesSubOpen[8] = { false, false, false, false, false, false, false, false };
+                QuestionItem crates_sub[8][2];
+                for (int i = 0; i < 8; ++i)
+                {
+                    crates_sub[i][0] = MakeQCheckbox("NAME", &S::world_crates_name[i]);
+                    crates_sub[i][1] = MakeQCheckbox("DIST", &S::world_crates_dist[i]);
+                }
+                QuestionItem crates_items[8];
+                for (int i = 0; i < 8; ++i)
+                {
+                    crates_items[i] = MakeQSubmenu(crates_sub_ids[i], crates_labels[i], crates_sub[i], 2, &s_cratesSubOpen[i]);
+                    crates_items[i].bool_val = &S::world_crates_sel[i];
+                    crates_items[i].col_val = reinterpret_cast<ImVec4*>(S::world_crates_color[i]);
+                }
+                kb_hov |= DrawQuestionButton("##qb_crates", dl, ImVec2(v_right_bot_max.x - 14.0f - crates_kb_sz.x - 8.0f, my), crates_items, 8, tab_font, 13.0f);
+            }
+            my += kCheckRowPitch;
+            cb_hov |= DrawCheckbox(dl, ImVec2(v_right_bot_min.x + 14.0f, my), &S::world_keycards_enabled, "Keycards", tab_font, 13.0f);
+            kb_hov |= DrawKeybind("##keycards_key", dl, ImVec2(v_right_bot_max.x - 14.0f, my), &S::world_keycards_key, &S::world_keycards_key_mode, tab_font, 13.0f);
+            {
+                char keycards_kb_buf[64];
+                if (g_activeBindId != nullptr && strcmp(g_activeBindId, "##keycards_key") == 0)
+                    snprintf(keycards_kb_buf, sizeof(keycards_kb_buf), "[ ]");
+                else if (S::world_keycards_key == 0)
+                    snprintf(keycards_kb_buf, sizeof(keycards_kb_buf), "[ . . . ]");
+                else
+                    snprintf(keycards_kb_buf, sizeof(keycards_kb_buf), "[ %s ]", GetKeyDisplayName(S::world_keycards_key));
+                ImFont* keycards_qf = tab_font ? tab_font : ImGui::GetFont();
+                ImVec2 keycards_kb_sz = keycards_qf->CalcTextSizeA(13.0f, FLT_MAX, 0.0f, keycards_kb_buf);
+                const char* keycards_sub_ids[5] = { "##qb_keycards_sub0", "##qb_keycards_sub1", "##qb_keycards_sub2", "##qb_keycards_sub3", "##qb_keycards_sub4" };
+                const char* keycards_labels[5] = { "YELLOW", "PURPLE", "RED", "PINK", "BLACK" };
+                static bool s_keycardsSubOpen[5] = { false, false, false, false, false };
+                QuestionItem keycards_sub[5][2];
+                for (int i = 0; i < 5; ++i)
+                {
+                    keycards_sub[i][0] = MakeQCheckbox("NAME", &S::world_keycards_name[i]);
+                    keycards_sub[i][1] = MakeQCheckbox("DIST", &S::world_keycards_dist[i]);
+                }
+                QuestionItem keycards_items[5];
+                for (int j = 0; j < 5; ++j)
+                {
+                    keycards_items[j] = MakeQSubmenu(keycards_sub_ids[j], keycards_labels[j], keycards_sub[j], 2, &s_keycardsSubOpen[j]);
+                    keycards_items[j].bool_val = &S::world_keycards_sel[j];
+                    keycards_items[j].col_val = reinterpret_cast<ImVec4*>(S::world_keycards_color[j]);
+                }
+                kb_hov |= DrawQuestionButton("##qb_keycards", dl, ImVec2(v_right_bot_max.x - 14.0f - keycards_kb_sz.x - 8.0f, my), keycards_items, 5, tab_font, 13.0f);
+            }
+            my += kCheckRowPitch;
         }
         else if (g_activeTab == 2)
         {
@@ -4902,6 +5316,123 @@ inline std::string BuildConfigPayload(const char* name)
         S::world_fog_color[0], S::world_fog_color[1], S::world_fog_color[2], S::world_fog_color[3]);
     payload += buf;
 
+    snprintf(buf, sizeof(buf), "world_ore_enabled=%d\nworld_ore_key=%d\nworld_ore_key_mode=%d\nworld_ore_name=%d,%d,%d\nworld_ore_dist=%d,%d,%d\nworld_ore_stone=%d\nworld_ore_phosphate=%d\nworld_ore_metal=%d\nworld_plant_key=%d\nworld_plant_key_mode=%d\n",
+        S::world_ore_enabled ? 1 : 0, S::world_ore_key, S::world_ore_key_mode,
+        S::world_ore_name[0] ? 1 : 0, S::world_ore_name[1] ? 1 : 0, S::world_ore_name[2] ? 1 : 0,
+        S::world_ore_dist[0] ? 1 : 0, S::world_ore_dist[1] ? 1 : 0, S::world_ore_dist[2] ? 1 : 0,
+        S::world_ore_stone ? 1 : 0, S::world_ore_phosphate ? 1 : 0, S::world_ore_metal ? 1 : 0,
+        S::world_plant_key, S::world_plant_key_mode);
+    payload += buf;
+
+    snprintf(buf, sizeof(buf), "world_ore_stone_color=%.4f,%.4f,%.4f,%.4f\nworld_ore_phosphate_color=%.4f,%.4f,%.4f,%.4f\nworld_ore_metal_color=%.4f,%.4f,%.4f,%.4f\n",
+        S::world_ore_stone_color[0], S::world_ore_stone_color[1], S::world_ore_stone_color[2], S::world_ore_stone_color[3],
+        S::world_ore_phosphate_color[0], S::world_ore_phosphate_color[1], S::world_ore_phosphate_color[2], S::world_ore_phosphate_color[3],
+        S::world_ore_metal_color[0], S::world_ore_metal_color[1], S::world_ore_metal_color[2], S::world_ore_metal_color[3]);
+    payload += buf;
+
+    snprintf(buf, sizeof(buf), "world_plant_enabled=%d\nworld_plant_sel=%d,%d,%d,%d,%d,%d,%d\n",
+        S::world_plant_enabled ? 1 : 0,
+        S::world_plant_sel[0] ? 1 : 0, S::world_plant_sel[1] ? 1 : 0, S::world_plant_sel[2] ? 1 : 0,
+        S::world_plant_sel[3] ? 1 : 0, S::world_plant_sel[4] ? 1 : 0, S::world_plant_sel[5] ? 1 : 0,
+        S::world_plant_sel[6] ? 1 : 0);
+    payload += buf;
+    for (int i = 0; i < 7; ++i)
+    {
+        snprintf(buf, sizeof(buf), "world_plant_color%d=%.4f,%.4f,%.4f,%.4f\n", i,
+            (double)S::world_plant_color[i][0], (double)S::world_plant_color[i][1],
+            (double)S::world_plant_color[i][2], (double)S::world_plant_color[i][3]);
+        payload += buf;
+    }
+
+    snprintf(buf, sizeof(buf), "world_bots_enabled=%d\nworld_bots_key=%d\nworld_bots_key_mode=%d\nworld_bots_sel=%d,%d,%d\n",
+        S::world_bots_enabled ? 1 : 0, S::world_bots_key, S::world_bots_key_mode,
+        S::world_bots_sel[0] ? 1 : 0, S::world_bots_sel[1] ? 1 : 0, S::world_bots_sel[2] ? 1 : 0);
+    payload += buf;
+    for (int i = 0; i < 3; ++i)
+    {
+        snprintf(buf, sizeof(buf), "world_bots_color%d=%.4f,%.4f,%.4f,%.4f\n", i,
+            (double)S::world_bots_color[i][0], (double)S::world_bots_color[i][1],
+            (double)S::world_bots_color[i][2], (double)S::world_bots_color[i][3]);
+        payload += buf;
+    }
+
+    snprintf(buf, sizeof(buf), "world_bots_box=%d,%d,%d\nworld_bots_name=%d,%d,%d\nworld_bots_dist=%d,%d,%d\n",
+        S::world_bots_box[0] ? 1 : 0, S::world_bots_box[1] ? 1 : 0, S::world_bots_box[2] ? 1 : 0,
+        S::world_bots_name[0] ? 1 : 0, S::world_bots_name[1] ? 1 : 0, S::world_bots_name[2] ? 1 : 0,
+        S::world_bots_dist[0] ? 1 : 0, S::world_bots_dist[1] ? 1 : 0, S::world_bots_dist[2] ? 1 : 0);
+    payload += buf;
+
+    snprintf(buf, sizeof(buf), "world_animals_enabled=%d\nworld_animals_key=%d\nworld_animals_key_mode=%d\nworld_animals_sel=%d,%d,%d\nworld_animals_name=%d,%d,%d\nworld_animals_dist=%d,%d,%d\n",
+        S::world_animals_enabled ? 1 : 0, S::world_animals_key, S::world_animals_key_mode,
+        S::world_animals_sel[0] ? 1 : 0, S::world_animals_sel[1] ? 1 : 0, S::world_animals_sel[2] ? 1 : 0,
+        S::world_animals_name[0] ? 1 : 0, S::world_animals_name[1] ? 1 : 0, S::world_animals_name[2] ? 1 : 0,
+        S::world_animals_dist[0] ? 1 : 0, S::world_animals_dist[1] ? 1 : 0, S::world_animals_dist[2] ? 1 : 0);
+    payload += buf;
+    for (int i = 0; i < 3; ++i)
+    {
+        snprintf(buf, sizeof(buf), "world_animals_color%d=%.4f,%.4f,%.4f,%.4f\n", i,
+            (double)S::world_animals_color[i][0], (double)S::world_animals_color[i][1],
+            (double)S::world_animals_color[i][2], (double)S::world_animals_color[i][3]);
+        payload += buf;
+    }
+
+    snprintf(buf, sizeof(buf), "world_tools_enabled=%d\nworld_tools_key=%d\nworld_tools_key_mode=%d\nworld_tools_sel=%d,%d,%d,%d,%d,%d,%d\nworld_tools_name=%d,%d,%d,%d,%d,%d,%d\nworld_tools_dist=%d,%d,%d,%d,%d,%d,%d\n",
+        S::world_tools_enabled ? 1 : 0, S::world_tools_key, S::world_tools_key_mode,
+        S::world_tools_sel[0] ? 1 : 0, S::world_tools_sel[1] ? 1 : 0, S::world_tools_sel[2] ? 1 : 0,
+        S::world_tools_sel[3] ? 1 : 0, S::world_tools_sel[4] ? 1 : 0, S::world_tools_sel[5] ? 1 : 0,
+        S::world_tools_sel[6] ? 1 : 0,
+        S::world_tools_name[0] ? 1 : 0, S::world_tools_name[1] ? 1 : 0, S::world_tools_name[2] ? 1 : 0,
+        S::world_tools_name[3] ? 1 : 0, S::world_tools_name[4] ? 1 : 0, S::world_tools_name[5] ? 1 : 0,
+        S::world_tools_name[6] ? 1 : 0,
+        S::world_tools_dist[0] ? 1 : 0, S::world_tools_dist[1] ? 1 : 0, S::world_tools_dist[2] ? 1 : 0,
+        S::world_tools_dist[3] ? 1 : 0, S::world_tools_dist[4] ? 1 : 0, S::world_tools_dist[5] ? 1 : 0,
+        S::world_tools_dist[6] ? 1 : 0);
+    payload += buf;
+    for (int i = 0; i < 7; ++i)
+    {
+        snprintf(buf, sizeof(buf), "world_tools_color%d=%.4f,%.4f,%.4f,%.4f\n", i,
+            (double)S::world_tools_color[i][0], (double)S::world_tools_color[i][1],
+            (double)S::world_tools_color[i][2], (double)S::world_tools_color[i][3]);
+        payload += buf;
+    }
+
+    snprintf(buf, sizeof(buf), "world_crates_enabled=%d\nworld_crates_key=%d\nworld_crates_key_mode=%d\nworld_crates_sel=%d,%d,%d,%d,%d,%d,%d,%d\nworld_crates_name=%d,%d,%d,%d,%d,%d,%d,%d\nworld_crates_dist=%d,%d,%d,%d,%d,%d,%d,%d\n",
+        S::world_crates_enabled ? 1 : 0, S::world_crates_key, S::world_crates_key_mode,
+        S::world_crates_sel[0] ? 1 : 0, S::world_crates_sel[1] ? 1 : 0, S::world_crates_sel[2] ? 1 : 0,
+        S::world_crates_sel[3] ? 1 : 0, S::world_crates_sel[4] ? 1 : 0, S::world_crates_sel[5] ? 1 : 0,
+        S::world_crates_sel[6] ? 1 : 0, S::world_crates_sel[7] ? 1 : 0,
+        S::world_crates_name[0] ? 1 : 0, S::world_crates_name[1] ? 1 : 0, S::world_crates_name[2] ? 1 : 0,
+        S::world_crates_name[3] ? 1 : 0, S::world_crates_name[4] ? 1 : 0, S::world_crates_name[5] ? 1 : 0,
+        S::world_crates_name[6] ? 1 : 0, S::world_crates_name[7] ? 1 : 0,
+        S::world_crates_dist[0] ? 1 : 0, S::world_crates_dist[1] ? 1 : 0, S::world_crates_dist[2] ? 1 : 0,
+        S::world_crates_dist[3] ? 1 : 0, S::world_crates_dist[4] ? 1 : 0, S::world_crates_dist[5] ? 1 : 0,
+        S::world_crates_dist[6] ? 1 : 0, S::world_crates_dist[7] ? 1 : 0);
+    payload += buf;
+    for (int i = 0; i < 8; ++i)
+    {
+        snprintf(buf, sizeof(buf), "world_crates_color%d=%.4f,%.4f,%.4f,%.4f\n", i,
+            (double)S::world_crates_color[i][0], (double)S::world_crates_color[i][1],
+            (double)S::world_crates_color[i][2], (double)S::world_crates_color[i][3]);
+        payload += buf;
+    }
+
+    snprintf(buf, sizeof(buf), "world_keycards_enabled=%d\nworld_keycards_key=%d\nworld_keycards_key_mode=%d\nworld_keycards_sel=%d,%d,%d,%d,%d\nworld_keycards_name=%d,%d,%d,%d,%d\nworld_keycards_dist=%d,%d,%d,%d,%d\n",
+        S::world_keycards_enabled ? 1 : 0, S::world_keycards_key, S::world_keycards_key_mode,
+        S::world_keycards_sel[0] ? 1 : 0, S::world_keycards_sel[1] ? 1 : 0, S::world_keycards_sel[2] ? 1 : 0,
+        S::world_keycards_sel[3] ? 1 : 0, S::world_keycards_sel[4] ? 1 : 0,
+        S::world_keycards_name[0] ? 1 : 0, S::world_keycards_name[1] ? 1 : 0, S::world_keycards_name[2] ? 1 : 0,
+        S::world_keycards_name[3] ? 1 : 0, S::world_keycards_name[4] ? 1 : 0,
+        S::world_keycards_dist[0] ? 1 : 0, S::world_keycards_dist[1] ? 1 : 0, S::world_keycards_dist[2] ? 1 : 0,
+        S::world_keycards_dist[3] ? 1 : 0, S::world_keycards_dist[4] ? 1 : 0);
+    payload += buf;
+    for (int i = 0; i < 5; ++i)
+    {
+        snprintf(buf, sizeof(buf), "world_keycards_color%d=%.4f,%.4f,%.4f,%.4f\n", i,
+            (double)S::world_keycards_color[i][0], (double)S::world_keycards_color[i][1],
+            (double)S::world_keycards_color[i][2], (double)S::world_keycards_color[i][3]);
+        payload += buf;
+    }
+
     snprintf(buf, sizeof(buf), "box_color=%.4f,%.4f,%.4f,%.4f\nbox_outline_color=%.4f,%.4f,%.4f,%.4f\nbox_fill_color=%.4f,%.4f,%.4f,%.4f\nbox_fill_color2=%.4f,%.4f,%.4f,%.4f\nskeleton_color=%.4f,%.4f,%.4f,%.4f\nskeleton_outline_color=%.4f,%.4f,%.4f,%.4f\nhealth_color=%.4f,%.4f,%.4f,%.4f\nhealth_outline_color=%.4f,%.4f,%.4f,%.4f\nname_color=%.4f,%.4f,%.4f,%.4f\nname_outline_color=%.4f,%.4f,%.4f,%.4f\nheaddot_color=%.4f,%.4f,%.4f,%.4f\nheaddot_outline_color=%.4f,%.4f,%.4f,%.4f\ndistance_color=%.4f,%.4f,%.4f,%.4f\ndistance_outline_color=%.4f,%.4f,%.4f,%.4f\ntool_color=%.4f,%.4f,%.4f,%.4f\ntool_outline_color=%.4f,%.4f,%.4f,%.4f\ntracer_color=%.4f,%.4f,%.4f,%.4f\ntracer_outline_color=%.4f,%.4f,%.4f,%.4f\noof_color=%.4f,%.4f,%.4f,%.4f\noof_outline_color=%.4f,%.4f,%.4f,%.4f\noof_name_color=%.4f,%.4f,%.4f,%.4f\noof_health_color=%.4f,%.4f,%.4f,%.4f\noof_distance_color=%.4f,%.4f,%.4f,%.4f\naim_fov_color=%.4f,%.4f,%.4f,%.4f\naim_fov_outline_color=%.4f,%.4f,%.4f,%.4f\naim_fov_fill_color=%.4f,%.4f,%.4f,%.4f\n",
         S::box_color[0], S::box_color[1], S::box_color[2], S::box_color[3],
         S::box_outline_color[0], S::box_outline_color[1], S::box_outline_color[2], S::box_outline_color[3],
@@ -4934,6 +5465,22 @@ inline std::string BuildConfigPayload(const char* name)
     snprintf(buf, sizeof(buf), "aim_tracer_color=%.4f,%.4f,%.4f,%.4f\naim_tracer_outline_color=%.4f,%.4f,%.4f,%.4f\n",
         S::aim_tracer_color[0], S::aim_tracer_color[1], S::aim_tracer_color[2], S::aim_tracer_color[3],
         S::aim_tracer_outline_color[0], S::aim_tracer_outline_color[1], S::aim_tracer_outline_color[2], S::aim_tracer_outline_color[3]);
+    payload += buf;
+
+    snprintf(buf, sizeof(buf), "aim_autoshoot_delay=%.2f\naim_distance_value=%.2f\naim_fov=%.2f\naim_fov_fill=%d\naim_fov_outline=%d\naim_health_value=%.2f\naim_smoothing=%.2f\naim_smoothing_x=%.2f\naim_smoothing_y=%.2f\naim_tracer_outline=%d\naim_tracer_thickness=%.2f\n",
+        (double)S::aim_autoshoot_delay, (double)S::aim_distance_value, (double)S::aim_fov,
+        S::aim_fov_fill ? 1 : 0, S::aim_fov_outline ? 1 : 0,
+        (double)S::aim_health_value, (double)S::aim_smoothing, (double)S::aim_smoothing_x, (double)S::aim_smoothing_y,
+        S::aim_tracer_outline ? 1 : 0, (double)S::aim_tracer_thickness);
+    payload += buf;
+
+    snprintf(buf, sizeof(buf), "fov_value=%.2f\nfreecam_speed=%.2f\nheaddot_thickness=%.2f\nhipheight_value=%.2f\nhitsound_volume=%.2f\njumppower_value=%.2f\noof_radius=%.2f\noof_size=%.2f\ntime_value=%.2f\ntool_distance_value=%.2f\ntracer_thickness=%.2f\nwalkspeed_value=%.2f\nworld_exposure_value=%.2f\nworld_fog_end=%.2f\nworld_fog_start=%.2f\n",
+        (double)S::fov_value, (double)S::freecam_speed, (double)S::headdot_thickness,
+        (double)S::hipheight_value, (double)S::hitsound_volume, (double)S::jumppower_value,
+        (double)S::oof_radius, (double)S::oof_size,
+        (double)S::time_value, (double)S::tool_distance_value, (double)S::tracer_thickness,
+        (double)S::walkspeed_value, (double)S::world_exposure_value, (double)S::world_fog_end,
+        (double)S::world_fog_start);
     payload += buf;
 
     snprintf(buf, sizeof(buf), "user_name=%s\n", g_textinput1);
@@ -5093,6 +5640,9 @@ inline bool ApplyConfigRaw(const std::string& raw)
     get_float("aim_smoothing_x", S::aim_smoothing_x);
     get_float("aim_smoothing_y", S::aim_smoothing_y);
     get_bool("aim_show_fov", S::aim_show_fov);
+    get_bool("aim_fov_fill", S::aim_fov_fill);
+    get_bool("aim_fov_outline", S::aim_fov_outline);
+    get_bool("aim_tracer_outline", S::aim_tracer_outline);
     get_int("aim_fov_style", S::aim_fov_style);
     if (S::aim_fov_style < 0 || S::aim_fov_style > 1) S::aim_fov_style = 0;
     get_bool("aim_team_check", S::aim_team_check);
@@ -5200,6 +5750,144 @@ inline bool ApplyConfigRaw(const std::string& raw)
     get_float("world_fog_end", S::world_fog_end);
     get_bool("world_exposure_enabled", S::world_exposure_enabled);
     get_float("world_exposure_value", S::world_exposure_value);
+    get_bool("world_ore_enabled", S::world_ore_enabled);
+    get_int("world_ore_key", S::world_ore_key);
+    get_int("world_ore_key_mode", S::world_ore_key_mode);
+    get_int("world_plant_key", S::world_plant_key);
+    get_int("world_plant_key_mode", S::world_plant_key_mode);
+    {
+        std::string tag = "world_ore_name=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 3; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_ore_name[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    {
+        std::string tag = "world_ore_dist=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 3; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_ore_dist[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    get_bool("world_ore_stone", S::world_ore_stone);
+    get_bool("world_ore_phosphate", S::world_ore_phosphate);
+    get_bool("world_ore_metal", S::world_ore_metal);
+    get_bool("world_plant_enabled", S::world_plant_enabled);
+    get_bool("world_bots_enabled", S::world_bots_enabled);
+    get_int("world_bots_key", S::world_bots_key);
+    get_int("world_bots_key_mode", S::world_bots_key_mode);
+    get_bool("world_animals_enabled", S::world_animals_enabled);
+    get_int("world_animals_key", S::world_animals_key);
+    get_int("world_animals_key_mode", S::world_animals_key_mode);
+    get_bool("world_tools_enabled", S::world_tools_enabled);
+    get_int("world_tools_key", S::world_tools_key);
+    get_int("world_tools_key_mode", S::world_tools_key_mode);
+    get_bool("world_crates_enabled", S::world_crates_enabled);
+    get_int("world_crates_key", S::world_crates_key);
+    get_int("world_crates_key_mode", S::world_crates_key_mode);
+    get_bool("world_keycards_enabled", S::world_keycards_enabled);
+    get_int("world_keycards_key", S::world_keycards_key);
+    get_int("world_keycards_key_mode", S::world_keycards_key_mode);
+    {
+        std::string tag = "world_animals_name=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 3; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_animals_name[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    {
+        std::string tag = "world_animals_dist=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 3; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_animals_dist[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    {
+        std::string tag = "world_animals_sel=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 3; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_animals_sel[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    {
+        std::string tag = "world_plant_sel=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 7; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_plant_sel[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
     auto get_col_arr = [&](const char* key, float arr[4]) {
         std::string tag = std::string(key) + "=";
         size_t p = raw.find(tag);
@@ -5261,6 +5949,292 @@ inline bool ApplyConfigRaw(const std::string& raw)
     get_col_arr("aim_tracer_color", S::aim_tracer_color);
     get_col_arr("aim_tracer_outline_color", S::aim_tracer_outline_color);
     get_col_arr("world_fog_color", S::world_fog_color);
+    get_col_arr("world_ore_stone_color", S::world_ore_stone_color);
+    get_col_arr("world_ore_phosphate_color", S::world_ore_phosphate_color);
+    get_col_arr("world_ore_metal_color", S::world_ore_metal_color);
+    for (int i = 0; i < 7; ++i)
+    {
+        char k[48];
+        snprintf(k, sizeof(k), "world_plant_color%d", i);
+        get_col_arr(k, S::world_plant_color[i]);
+    }
+    {
+        std::string tag = "world_bots_sel=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 3; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_bots_sel[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    for (int i = 0; i < 3; ++i)
+    {
+        char k[48];
+        snprintf(k, sizeof(k), "world_bots_color%d", i);
+        get_col_arr(k, S::world_bots_color[i]);
+    }
+    for (int i = 0; i < 3; ++i)
+    {
+        char k[48];
+        snprintf(k, sizeof(k), "world_animals_color%d", i);
+        get_col_arr(k, S::world_animals_color[i]);
+    }
+    {
+        std::string tag = "world_tools_sel=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 7; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_tools_sel[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    {
+        std::string tag = "world_tools_name=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 7; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_tools_name[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    {
+        std::string tag = "world_tools_dist=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 7; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_tools_dist[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    for (int i = 0; i < 7; ++i)
+    {
+        char k[48];
+        snprintf(k, sizeof(k), "world_tools_color%d", i);
+        get_col_arr(k, S::world_tools_color[i]);
+    }
+    {
+        std::string tag = "world_crates_sel=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 8; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_crates_sel[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    {
+        std::string tag = "world_crates_name=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 8; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_crates_name[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    {
+        std::string tag = "world_crates_dist=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 8; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_crates_dist[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    for (int i = 0; i < 8; ++i)
+    {
+        char k[48];
+        snprintf(k, sizeof(k), "world_crates_color%d", i);
+        get_col_arr(k, S::world_crates_color[i]);
+    }
+    {
+        std::string tag = "world_keycards_sel=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 5; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_keycards_sel[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    {
+        std::string tag = "world_keycards_name=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 5; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_keycards_name[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    {
+        std::string tag = "world_keycards_dist=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 5; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_keycards_dist[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    for (int i = 0; i < 5; ++i)
+    {
+        char k[48];
+        snprintf(k, sizeof(k), "world_keycards_color%d", i);
+        get_col_arr(k, S::world_keycards_color[i]);
+    }
+    {
+        std::string tag = "world_bots_box=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 3; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_bots_box[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    {
+        std::string tag = "world_bots_name=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 3; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_bots_name[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
+    {
+        std::string tag = "world_bots_dist=";
+        size_t p = raw.find(tag);
+        if (p != std::string::npos)
+        {
+            const char* s = raw.c_str() + p + tag.size();
+            for (int i = 0; i < 3; ++i)
+            {
+                char* end = nullptr;
+                long v = strtol(s, &end, 10);
+                if (end == s)
+                    break;
+                S::world_bots_dist[i] = (v != 0);
+                s = end;
+                if (*s == ',')
+                    ++s;
+            }
+        }
+    }
     get_str("user_name", g_textinput1, sizeof(g_textinput1));
     get_bool("vsync", g_vsync);
     get_bool("stream_proof", g_streamProof);

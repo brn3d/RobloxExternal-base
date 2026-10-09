@@ -4,7 +4,7 @@
 #include "../distance/distance.h"
 #include "../tracking/tracking.h"
 #include "../pftarget/pftarget.h"
-#include "../../../utility/cache/sdk.h"
+#include "../../../utility/cache/cache.h"
 #include "../../../utility/struct/world2screen.h"
 #include "../../../utility/global/globals.h"
 #include "../../../menu/overlay/settings.h"
@@ -35,6 +35,7 @@ namespace thenwefuckin::aim::mouse
     static float s_remY = 0.0f;
     static bool s_inDeadzone = false;
     static uintptr_t s_dzPlayer = 0;
+    static std::chrono::steady_clock::time_point s_lastSend{};
 
     static void resolve_targets()
     {
@@ -126,6 +127,18 @@ namespace thenwefuckin::aim::mouse
 
     static void send_mouse_move(float dx, float dy)
     {
+        auto now = std::chrono::steady_clock::now();
+        if (s_lastSend != std::chrono::steady_clock::time_point{} &&
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - s_lastSend).count() < 8)
+        {
+            s_remX += dx;
+            s_remY += dy;
+            if (fabsf(s_remX) > 32.0f) s_remX = 0.0f;
+            if (fabsf(s_remY) > 32.0f) s_remY = 0.0f;
+            return;
+        }
+        s_lastSend = now;
+
         dx += s_remX;
         dy += s_remY;
 

@@ -1,7 +1,7 @@
-﻿#include "autoshoot.h"
+#include "autoshoot.h"
 #include "../health/health.h"
 #include "../distance/distance.h"
-#include "../../../utility/cache/sdk.h"
+#include "../../../utility/cache/cache.h"
 #include "../../../utility/struct/world2screen.h"
 #include "../../../menu/overlay/settings.h"
 #include <Windows.h>

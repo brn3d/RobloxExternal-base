@@ -44,6 +44,15 @@
     <ClInclude Include="src\utility\stb\stb_image.h">
       <Filter>Header Files\utility</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\app.h">
+      <Filter>Header Files\src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\session.h">
+      <Filter>Header Files\src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\frame.h">
+      <Filter>Header Files\src</Filter>
+    </ClInclude>
     <ClInclude Include="src\menu\core\gui\menu.h">
       <Filter>Header Files\src</Filter>
     </ClInclude>
@@ -55,9 +64,6 @@
     </ClInclude>
     <ClInclude Include="src\menu\core\overlay\overlay.h">
       <Filter>Header Files\src</Filter>
-    </ClInclude>
-    <ClInclude Include="src\menu\overlay\overlay.h">
-      <Filter>Header Files\menu</Filter>
     </ClInclude>
     <ClInclude Include="src\menu\overlay\settings.h">
       <Filter>Header Files\menu</Filter>
@@ -158,6 +164,30 @@
     <ClInclude Include="src\features\visual\core\visual.h">
       <Filter>Header Files\features</Filter>
     </ClInclude>
+    <ClInclude Include="src\features\visual\world\common.h">
+      <Filter>Header Files\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\visual\world\ore.h">
+      <Filter>Header Files\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\visual\world\plants.h">
+      <Filter>Header Files\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\visual\world\bots.h">
+      <Filter>Header Files\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\visual\world\animals.h">
+      <Filter>Header Files\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\visual\world\tools.h">
+      <Filter>Header Files\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\visual\world\crates.h">
+      <Filter>Header Files\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\visual\world\keycards.h">
+      <Filter>Header Files\features</Filter>
+    </ClInclude>
     <ClInclude Include="src\features\visual\headdot\headdot.h">
       <Filter>Header Files\features</Filter>
     </ClInclude>
@@ -179,7 +209,7 @@
     <ClInclude Include="src\utility\cache\math.h">
       <Filter>Header Files\utility</Filter>
     </ClInclude>
-    <ClInclude Include="src\utility\cache\sdk.h">
+    <ClInclude Include="src\utility\cache\cache.h">
       <Filter>Header Files\utility</Filter>
     </ClInclude>
     <ClInclude Include="src\utility\struct\offsets.h">
@@ -195,6 +225,15 @@
   <ItemGroup>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\app.cpp">
+      <Filter>Source Files\src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\session.cpp">
+      <Filter>Source Files\src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\frame.cpp">
+      <Filter>Source Files\src</Filter>
     </ClCompile>
     <ClCompile Include="src\menu\core\overlay\overlay.cpp">
       <Filter>Source Files\src</Filter>
@@ -281,6 +320,27 @@
       <Filter>Source Files\features</Filter>
     </ClCompile>
     <ClCompile Include="src\features\visual\core\visual.cpp">
+      <Filter>Source Files\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\visual\world\ore.cpp">
+      <Filter>Source Files\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\visual\world\plants.cpp">
+      <Filter>Source Files\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\visual\world\bots.cpp">
+      <Filter>Source Files\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\visual\world\animals.cpp">
+      <Filter>Source Files\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\visual\world\tools.cpp">
+      <Filter>Source Files\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\visual\world\crates.cpp">
+      <Filter>Source Files\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\visual\world\keycards.cpp">
       <Filter>Source Files\features</Filter>
     </ClCompile>
     <ClCompile Include="src\features\visual\headdot\headdot.cpp">

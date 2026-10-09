@@ -1,4 +1,4 @@
-﻿#include "smooth.h"
+#include "smooth.h"
 #include "../../../menu/overlay/settings.h"
 #include <algorithm>
 #include <cmath>

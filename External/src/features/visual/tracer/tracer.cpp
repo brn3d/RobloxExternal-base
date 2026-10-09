@@ -1,4 +1,4 @@
-﻿#include "tracer.h"
+#include "tracer.h"
 
 namespace thenwefuckin::visual::tracer
 {
