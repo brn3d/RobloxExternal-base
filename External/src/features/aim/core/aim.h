@@ -15,6 +15,7 @@ namespace thenwefuckin::aim
     bool debug_in_use();
     uintptr_t local_team_addr();
     bool should_skip_teammate(uintptr_t localTeam, uintptr_t targetTeam);
+    bool is_teammate(uintptr_t playerAddr, uintptr_t characterAddr, uintptr_t teamAddr);
     void on_game_joined();
 
     struct BotAimTarget

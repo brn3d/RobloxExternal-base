@@ -1,5 +1,6 @@
 #define NOMINMAX
 #include "player_preview.h"
+#include "../players/avatars.h"
 #include "../../../utility/cache/cache.h"
 #include "../../../utility/stb/stb_image.h"
 #include "../../../menu/core/gui/menu.h"
@@ -1481,6 +1482,7 @@ float4 PS(Pin i) : SV_Target
             }
         }
     }
+    static void render_backend(ImDrawList* dl, ImVec2 min, ImVec2 max);
     void render(ImDrawList* dl, ImVec2 min, ImVec2 max)
     {
         ImGuiIO& io = ImGui::GetIO();
@@ -1518,6 +1520,13 @@ float4 PS(Pin i) : SV_Target
             snprintf(buf, sizeof(buf), "%lld", (long long)uid);
             pull_uid(buf);
         }
+        render_backend(dl, min, max);
+    }
+    static void render_backend(ImDrawList* dl, ImVec2 min, ImVec2 max)
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        ImVec2 m = io.MousePos;
+        double now = ImGui::GetTime();
         ID3D11Device* dev = Overlay::GetDeviceStatic();
         ID3D11DeviceContext* ctx = Overlay::GetContextStatic();
         if (dev && ctx && !s.gfxReady && !s.gfxFailed)
@@ -1921,5 +1930,179 @@ float4 PS(Pin i) : SV_Target
             ImVec2 notePos{ floorf(vpMin.x + vpw * 0.5f - ts.x * 0.5f), floorf(vpMax.y - ts.y - 4.0f) };
             Menu::DrawOutlinedText(dl, fs, 11.0f, notePos, IM_COL32(160, 160, 170, 220), IM_COL32(0, 0, 0, 255), s.note.c_str());
         }
+    }
+    static void render_2d_fallback_with_esp(ImDrawList* dl, ImVec2 min, ImVec2 max, ID3D11ShaderResourceView* srv, int srvW, int srvH, const char* note)
+    {
+        // Mirrors the local-player preview 2D fallback (render_backend else-branch):
+        // centered 2D avatar image (or dummy box) + full ESP overlay + status note.
+        float vw = floorf(max.x - min.x);
+        float vh = floorf(max.y - min.y);
+        if (vw < 40.0f || vh < 40.0f)
+        {
+            if (srv)
+                dl->AddImage((ImTextureID)srv, ImVec2(min.x + 2.0f, min.y + 2.0f), ImVec2(max.x - 2.0f, max.y - 2.0f));
+            return;
+        }
+        ImVec2 vpMin{ floorf(min.x + 2.0f), floorf(min.y + 2.0f) };
+        ImVec2 vpMax{ floorf(max.x - 2.0f), floorf(max.y - 2.0f) };
+        float vpw = vpMax.x - vpMin.x;
+        float vph = vpMax.y - vpMin.y;
+        float midX = vpMin.x + vpw * 0.5f;
+        float midY = vpMin.y + vph * 0.5f;
+        float dummyH = std::clamp(vph * 0.62f, 90.0f, 220.0f);
+        float dummyW = dummyH * 0.48f;
+        thenwefuckin::data::rect rc;
+        if (srv)
+        {
+            float aspect = (srvW > 0 && srvH > 0) ? ((float)srvH / (float)srvW) : 1.0f;
+            float imgW = (std::min)(vpw - 8.0f, 220.0f);
+            if (imgW < 40.0f) imgW = 40.0f;
+            float imgH = imgW * aspect;
+            float maxH = vph - 28.0f;
+            if (maxH > 40.0f && imgH > maxH) { imgW *= maxH / imgH; imgH = maxH; }
+            ImVec2 imgMin{ std::floor(midX - imgW * 0.5f), std::floor(vpMin.y + 4.0f) };
+            ImVec2 imgMax{ imgMin.x + imgW, imgMin.y + imgH };
+            dl->AddImage((ImTextureID)srv, imgMin, imgMax);
+            dummyW = imgW;
+            dummyH = imgH;
+            rc.x0 = imgMin.x;
+            rc.x1 = imgMax.x;
+            rc.y0 = imgMin.y;
+            rc.y1 = imgMax.y;
+        }
+        else
+        {
+            rc.x0 = std::floor(midX - dummyW * 0.5f);
+            rc.x1 = std::floor(midX + dummyW * 0.5f);
+            rc.y0 = std::floor(midY - dummyH * 0.5f);
+            rc.y1 = std::floor(midY + dummyH * 0.5f);
+            dl->AddRectFilled(ImVec2(rc.x0, rc.y0), ImVec2(rc.x1, rc.y1), IM_COL32(22, 22, 26, 120));
+            dl->AddRect(ImVec2(rc.x0, rc.y0), ImVec2(rc.x1, rc.y1), IM_COL32(50, 50, 60, 160));
+        }
+        ImVec2 hs{ midX, rc.y0 + dummyH * 0.14f };
+        ImVec2 n{ midX, rc.y0 + dummyH * 0.26f };
+        ImVec2 t{ midX, rc.y0 + dummyH * 0.42f };
+        ImVec2 p{ midX, rc.y0 + dummyH * 0.56f };
+        ImVec2 ls{ midX - dummyW * 0.38f, rc.y0 + dummyH * 0.28f };
+        ImVec2 rs{ midX + dummyW * 0.38f, rc.y0 + dummyH * 0.28f };
+        ImVec2 le{ midX - dummyW * 0.46f, rc.y0 + dummyH * 0.44f };
+        ImVec2 re{ midX + dummyW * 0.46f, rc.y0 + dummyH * 0.44f };
+        ImVec2 lh{ midX - dummyW * 0.46f, rc.y0 + dummyH * 0.58f };
+        ImVec2 rh{ midX + dummyW * 0.46f, rc.y0 + dummyH * 0.58f };
+        ImVec2 l_hip{ midX - dummyW * 0.20f, rc.y0 + dummyH * 0.58f };
+        ImVec2 r_hip{ midX + dummyW * 0.20f, rc.y0 + dummyH * 0.58f };
+        ImVec2 lk{ midX - dummyW * 0.20f, rc.y0 + dummyH * 0.78f };
+        ImVec2 rk{ midX + dummyW * 0.20f, rc.y0 + dummyH * 0.78f };
+        ImVec2 lf{ midX - dummyW * 0.20f, rc.y1 - 2.0f };
+        ImVec2 rf{ midX + dummyW * 0.20f, rc.y1 - 2.0f };
+        static thread_local std::vector<std::pair<ImVec2, ImVec2>> dummyBones;
+        if (dummyBones.empty())
+        {
+            dummyBones.reserve(15);
+            dummyBones.assign({
+                { hs, n }, { n, t }, { t, p },
+                { n, ls }, { ls, le }, { le, lh },
+                { n, rs }, { rs, re }, { re, rh },
+                { p, l_hip }, { l_hip, lk }, { lk, lf },
+                { p, r_hip }, { r_hip, rk }, { rk, rf }
+            });
+        }
+        else
+        {
+            dummyBones[0] = { hs, n }; dummyBones[1] = { n, t }; dummyBones[2] = { t, p };
+            dummyBones[3] = { n, ls }; dummyBones[4] = { ls, le }; dummyBones[5] = { le, lh };
+            dummyBones[6] = { n, rs }; dummyBones[7] = { rs, re }; dummyBones[8] = { re, rh };
+            dummyBones[9] = { p, l_hip }; dummyBones[10] = { l_hip, lk }; dummyBones[11] = { lk, lf };
+            dummyBones[12] = { p, r_hip }; dummyBones[13] = { r_hip, rk }; dummyBones[14] = { rk, rf };
+        }
+        render_esp_visuals(dl, rc, hs, dummyBones, true, true);
+        if (note && note[0])
+        {
+            ImFont* fs = g_fontSmall ? g_fontSmall : ImGui::GetFont();
+            ImVec2 ts = fs->CalcTextSizeA(11.0f, FLT_MAX, 0.0f, note);
+            ImVec2 notePos{ floorf(vpMin.x + vpw * 0.5f - ts.x * 0.5f), floorf(vpMax.y - ts.y - 4.0f) };
+            Menu::DrawOutlinedText(dl, fs, 11.0f, notePos, IM_COL32(160, 160, 170, 220), IM_COL32(0, 0, 0, 255), note);
+        }
+    }
+    void render_for(int64_t uid, ImDrawList* dl, ImVec2 min, ImVec2 max)
+    {
+        if (uid <= 0)
+            return;
+        ID3D11Device* dev = Overlay::GetDeviceStatic();
+        ID3D11DeviceContext* ctx = Overlay::GetContextStatic();
+        if (dev && ctx && !s.gfxReady && !s.gfxFailed)
+        {
+            if (--s.gfxRetryCd <= 0)
+            {
+                s.gfxRetryCd = 300;
+                if (compile_shaders(dev))
+                    s.gfxReady = true;
+                else
+                {
+                    s.gfxFailed = true;
+                    s.note = "Preview renderer failed to start.";
+                }
+            }
+        }
+        if (dev && ctx && s.gfxReady)
+            commit_meshes(dev);
+        if (Menu::g_playerPreviewOpen)
+        {
+            // Local preview owns the shared 3D state, so show 2D exactly like
+            // the local preview does (centered avatar + ESP overlay).
+            ID3D11ShaderResourceView* srv = players::avatars::avatar_for((long long)uid);
+            render_2d_fallback_with_esp(dl, min, max, srv, 1, 1, nullptr);
+            return;
+        }
+        double now = ImGui::GetTime();
+        if (uid != s.pulledUid && !s.busy && now - s.lastTry > 1.0)
+        {
+            s.lastTry = now;
+            s.pulledUid = uid;
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%lld", (long long)uid);
+            pull_uid(buf);
+        }
+        if (s.phase == Phase::Broke && !s.busy && now - s.lastTry > 20.0
+            && !s.thumbSrv && !s.thumbPending.load(std::memory_order_acquire))
+        {
+            s.lastTry = now;
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%lld", (long long)uid);
+            pull_uid(buf);
+        }
+        bool modelShown = s.gfxReady && s.phase == Phase::Done && !s.meshes.empty() && s.srv;
+        if (!modelShown)
+        {
+            // Same 2D fallback as local preview: thumb (or headshot avatar)
+            // centered + ESP visuals + status note.
+            ID3D11ShaderResourceView* srv = nullptr;
+            int tw = 1, th = 1;
+            const char* note = nullptr;
+            std::string ownedNote;
+            if (s.pulledUid == uid && s.thumbSrv)
+            {
+                srv = s.thumbSrv;
+                tw = s.thumbW;
+                th = s.thumbH;
+                note = s.note.c_str();
+            }
+            else
+            {
+                srv = players::avatars::avatar_for((long long)uid);
+                if (s.pulledUid == uid)
+                    note = s.note.c_str();
+                else
+                    note = "Fetching avatar...";
+            }
+            render_2d_fallback_with_esp(dl, min, max, srv, tw, th, note);
+            return;
+        }
+        render_backend(dl, min, max);
+    }
+    void refresh()
+    {
+        s.pulledUid = 0;
+        s.lastTry = 0.0;
     }
 }

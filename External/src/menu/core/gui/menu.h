@@ -15,12 +15,17 @@
 #include "../../../utility/logger/logger.h"
 #include "../overlay/overlay.h"
 #include "resources/icons.h"
+#include "../../../menu/resources/font.h"
 #include "../../../menu/overlay/settings.h"
 #include "../../../features/visual/preview/player_preview.h"
 #include "../../../features/misc/hitsound/hitsound.h"
 #include "../../../features/misc/explorer/explorer.h"
 #include "./mascot.h"
 #include "../../../features/aim/raycast/raycast.h"
+#include "../../../features/aim/predict/predict.h"
+#include "../../../features/visual/players/avatars.h"
+#include "../../../features/visual/players/friends.h"
+#include "../../../features/misc/spectate/spectate.h"
 #include "../../../utility/cache/cache.h"
 namespace S = thenwefuckin::settings;
 namespace Menu
@@ -31,7 +36,7 @@ inline bool g_navHidden = false;
 inline bool g_settingsOpen = false;
 inline float g_setAnim = 0.0f;
 inline ImVec2 g_setPos = ImVec2(-1.0f, -1.0f);
-inline ImVec2 g_setSize = ImVec2(340.0f, 348.0f);
+inline ImVec2 g_setSize = ImVec2(340.0f, 366.0f);
 inline bool g_setDragging = false;
 inline ImVec2 g_setDragOff = ImVec2(0.0f, 0.0f);
 inline bool g_themeOpen = false;
@@ -50,6 +55,11 @@ inline ImVec2 g_playerPreviewPos = ImVec2(-1.0f, -1.0f);
 inline ImVec2 g_playerPreviewSize = ImVec2(280.0f, 380.0f);
 inline bool g_playerPreviewDragging = false;
 inline ImVec2 g_playerPreviewDragOff = ImVec2(0.0f, 0.0f);
+inline bool g_playersOpen = false;
+inline ImVec2 g_playersPos = ImVec2(-1.0f, -1.0f);
+inline ImVec2 g_playersSize = ImVec2(400.0f, 640.0f);
+inline bool g_playersDragging = false;
+inline ImVec2 g_playersDragOff = ImVec2(0.0f, 0.0f);
 inline bool g_previewSpin = false;
 inline bool g_previewAnimateHp = true;
 inline ImVec2 g_pos = ImVec2(-1.0f, -1.0f);
@@ -2790,22 +2800,25 @@ inline bool DrawWarnIndicator(const char* id, ImDrawList* dl, ImVec2 right_edge,
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 6.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
         if (ImGui::BeginTooltip())
         {
             ImDrawList* tdl = ImGui::GetWindowDrawList();
             ImVec2 tp = ImGui::GetCursorScreenPos();
-            ImFont* tf = ImGui::GetFont();
             const ImU32 tdark = IM_COL32(0, 0, 0, 255);
+            const ImU32 tlight = BorderU32();
             const char* title = "Warning";
-            ImVec2 tsz = tf->CalcTextSizeA(fs, FLT_MAX, 0.0f, title);
-            DrawOutlinedText(tdl, tf, fs, tp, IM_COL32(255, 200, 60, 255), tdark, title);
-            ImGui::Dummy(ImVec2(tsz.x, tsz.y + 2.0f));
             const char* msg = warn_text ? warn_text : kBannableWarnText;
-            ImVec2 msz = tf->CalcTextSizeA(fs, FLT_MAX, 0.0f, msg);
-            ImVec2 mp = ImGui::GetCursorScreenPos();
-            DrawOutlinedText(tdl, tf, fs, mp, TextU32(), tdark, msg);
-            ImGui::Dummy(ImVec2(msz.x, msz.y));
+            ImVec2 tsz = f->CalcTextSizeA(fs, FLT_MAX, 0.0f, title);
+            ImVec2 msz = f->CalcTextSizeA(fs, FLT_MAX, 0.0f, msg);
+            float box_w = (std::max)(tsz.x, msz.x) + 24.0f;
+            float box_h = tsz.y + 2.0f + msz.y + 12.0f;
+            ImVec2 b0 = ImVec2(floorf(tp.x), floorf(tp.y));
+            ImVec2 b1 = ImVec2(floorf(tp.x + box_w), floorf(tp.y + box_h));
+            DrawPixelBox(tdl, b0, b1, GroupU32(), tlight, tdark);
+            DrawOutlinedText(tdl, f, fs, ImVec2(b0.x + 12.0f, b0.y + 6.0f), IM_COL32(255, 200, 60, 255), tdark, title);
+            DrawOutlinedText(tdl, f, fs, ImVec2(b0.x + 12.0f, b0.y + 6.0f + tsz.y + 2.0f), TextU32(), tdark, msg);
+            ImGui::Dummy(ImVec2(box_w, box_h));
             ImGui::EndTooltip();
         }
         ImGui::PopStyleVar(3);
@@ -3311,7 +3324,7 @@ inline constexpr float kNavTop = 12.0f;
 inline void CalcNavBarRect(int width, int height, ImVec2& outMin, ImVec2& outMax)
 {
     (void)height;
-    float bw = kNavPad * 2.0f + kNavTile * 5.0f + kNavGap * 4.0f;
+    float bw = kNavPad * 2.0f + kNavTile * 6.0f + kNavGap * 5.0f;
     float bh = kNavPad * 2.0f + kNavTile;
     float bx0 = floorf(((float)width - bw) * 0.5f);
     outMin = ImVec2(bx0, kNavTop);
@@ -3353,12 +3366,12 @@ inline bool PanelHitTest(int x, int y)
     {
         return true;
     }
+    if (g_playersOpen && g_playersPos.x >= 0.0f && x >= (int)g_playersPos.x && x <= (int)(g_playersPos.x + g_playersSize.x) && y >= (int)g_playersPos.y && y <= (int)(g_playersPos.y + g_playersSize.y))
+    {
+        return true;
+    }
     return false;
 }
-inline ID3D11ShaderResourceView* g_iconHomeTex = nullptr;
-inline ID3D11ShaderResourceView* g_iconPalTex = nullptr;
-inline ID3D11ShaderResourceView* g_iconFileTex = nullptr;
-inline ID3D11ShaderResourceView* g_iconUserTex = nullptr;
 ID3D11ShaderResourceView* LoadIconTexture(const unsigned char* png, int len);
 inline void RenderWatermark(ImDrawList* dl, int width, float fps)
 {
@@ -3549,6 +3562,7 @@ inline void RenderKeybinds(ImDrawList* dl, int width, int height)
     push_bind("##tools_key", "Tools", S::world_tools_enabled, S::world_tools_key, S::world_tools_key_mode);
     push_bind("##crates_key", "Crates", S::world_crates_enabled, S::world_crates_key, S::world_crates_key_mode);
     push_bind("##keycards_key", "Keycards", S::world_keycards_enabled, S::world_keycards_key, S::world_keycards_key_mode);
+    push_bind("##geo_key", "World geo", S::world_geo_enabled, S::world_geo_key, S::world_geo_key_mode);
     if (!g_menuOpen && count == 0)
     {
         return;
@@ -4155,52 +4169,63 @@ inline bool RenderNavBar(ImDrawList* dl, int width, int height)
     float by1 = barMax.y;
     float hx0 = bx0 + pad;
     float hy0 = by0 + pad;
-    float px0 = hx0 + tile + gap;
-    float py0 = hy0;
-    float sx0 = px0 + tile + gap;
-    float sy0 = hy0;
-    float fx0 = sx0 + tile + gap;
+    float plx0 = hx0 + tile + gap;
+    float ply0 = hy0;
+    float fx0 = plx0 + tile + gap;
     float fy0 = hy0;
-    float ux0 = fx0 + tile + gap;
+    float sx0 = fx0 + tile + gap;
+    float sy0 = hy0;
+    float px0 = sx0 + tile + gap;
+    float py0 = hy0;
+    float ux0 = px0 + tile + gap;
     float uy0 = hy0;
     bool home_active = g_menuOpen;
-    bool pal_active = g_themeOpen;
-    bool set_active = g_settingsOpen;
+    bool pl_active = g_playersOpen;
     bool file_active = g_explorerOpen;
+    bool set_active = g_settingsOpen;
+    bool pal_active = g_themeOpen;
     bool user_active = g_playerPreviewOpen;
     DrawPixelBox(dl, ImVec2(bx0, by0), ImVec2(bx1, by1), FrameU32(), BorderU32(), IM_COL32(0, 0, 0, 255));
     dl->AddRectFilled(ImVec2(bx0 + 2.0f, by0 + 2.0f), ImVec2(bx1 - 2.0f, by0 + 3.0f), AccentU32());
     ImGuiIO& io = ImGui::GetIO();
     ImVec2 m = io.MousePos;
     bool home_hov = (m.x >= hx0 && m.x <= hx0 + tile && m.y >= hy0 && m.y <= hy0 + tile);
-    bool pal_hov  = (m.x >= px0 && m.x <= px0 + tile && m.y >= py0 && m.y <= py0 + tile);
-    bool set_hov  = (m.x >= sx0 && m.x <= sx0 + tile && m.y >= sy0 && m.y <= sy0 + tile);
+    bool pl_hov = (m.x >= plx0 && m.x <= plx0 + tile && m.y >= ply0 && m.y <= ply0 + tile);
     bool file_hov = (m.x >= fx0 && m.x <= fx0 + tile && m.y >= fy0 && m.y <= fy0 + tile);
+    bool set_hov  = (m.x >= sx0 && m.x <= sx0 + tile && m.y >= sy0 && m.y <= sy0 + tile);
+    bool pal_hov  = (m.x >= px0 && m.x <= px0 + tile && m.y >= py0 && m.y <= py0 + tile);
     bool user_hov = (m.x >= ux0 && m.x <= ux0 + tile && m.y >= uy0 && m.y <= uy0 + tile);
     if (IsModalActive())
     {
         home_hov = false;
-        pal_hov = false;
-        set_hov = false;
+        pl_hov = false;
         file_hov = false;
+        set_hov = false;
+        pal_hov = false;
         user_hov = false;
     }
-    if (home_hov || pal_hov || set_hov || file_hov || user_hov)
+    if (home_hov || pl_hov || file_hov || set_hov || pal_hov || user_hov)
     {
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     }
-    g_navBarHov = home_hov || pal_hov || set_hov || file_hov || user_hov;
+    g_navBarHov = home_hov || pl_hov || file_hov || set_hov || pal_hov || user_hov;
     bool home_click = home_hov && ImGui::IsMouseClicked(0);
-    bool pal_click  = pal_hov && ImGui::IsMouseClicked(0);
-    bool set_click  = set_hov && ImGui::IsMouseClicked(0);
+    bool pl_click = pl_hov && ImGui::IsMouseClicked(0);
     bool file_click = file_hov && ImGui::IsMouseClicked(0);
+    bool set_click  = set_hov && ImGui::IsMouseClicked(0);
+    bool pal_click  = pal_hov && ImGui::IsMouseClicked(0);
     bool user_click = user_hov && ImGui::IsMouseClicked(0);
-    if (home_click || pal_click || set_click || file_click || user_click) UiClick();
+    if (home_click || pl_click || file_click || set_click || pal_click || user_click) UiClick();
     if (home_click)
     {
         if (g_menuOpen)
         {
             g_menuOpen = false;
+            g_playersOpen = false;
+            g_playerPreviewOpen = false;
+            g_settingsOpen = false;
+            g_themeOpen = false;
+            g_explorerOpen = false;
         }
         else
         {
@@ -4208,17 +4233,21 @@ inline bool RenderNavBar(ImDrawList* dl, int width, int height)
             g_menuOpen = true;
         }
     }
-    if (pal_click)
+    if (pl_click)
     {
-        g_themeOpen = !g_themeOpen;
+        g_playersOpen = !g_playersOpen;
+    }
+    if (file_click)
+    {
+        g_explorerOpen = !g_explorerOpen;
     }
     if (set_click)
     {
         g_settingsOpen = !g_settingsOpen;
     }
-    if (file_click)
+    if (pal_click)
     {
-        g_explorerOpen = !g_explorerOpen;
+        g_themeOpen = !g_themeOpen;
     }
     if (user_click)
     {
@@ -4230,112 +4259,33 @@ inline bool RenderNavBar(ImDrawList* dl, int width, int height)
         DrawPixelBox(dl, pos, ImVec2(pos.x + tile, pos.y + tile), bg, border, IM_COL32(0, 0, 0, 255));
     };
     draw_nav_tile(ImVec2(hx0, hy0), home_active, home_hov);
-    draw_nav_tile(ImVec2(px0, py0), pal_active, pal_hov);
-    draw_nav_tile(ImVec2(sx0, sy0), set_active, set_hov);
+    draw_nav_tile(ImVec2(plx0, ply0), pl_active, pl_hov);
     draw_nav_tile(ImVec2(fx0, fy0), file_active, file_hov);
+    draw_nav_tile(ImVec2(sx0, sy0), set_active, set_hov);
+    draw_nav_tile(ImVec2(px0, py0), pal_active, pal_hov);
     draw_nav_tile(ImVec2(ux0, uy0), user_active, user_hov);
-    ImU32 home_hole = (home_active || home_hov) ? CtrlHovU32() : CtrlBgU32();
-    ImU32 set_hole  = (set_active || set_hov)   ? CtrlHovU32() : CtrlBgU32();
     ImU32 col_active_icon = AccentU32();
     ImU32 col_hov_icon = IM_COL32(255, 255, 255, 255);
     ImU32 col_idle_icon = TextDimU32();
     ImU32 home_glyph = home_active ? (home_hov ? col_hov_icon : col_active_icon) : (home_hov ? col_hov_icon : col_idle_icon);
-    ImU32 pal_col    = pal_active  ? (pal_hov  ? col_hov_icon : col_active_icon) : (pal_hov  ? col_hov_icon : col_idle_icon);
-    ImU32 set_glyph  = set_active  ? (set_hov  ? col_hov_icon : col_active_icon) : (set_hov  ? col_hov_icon : col_idle_icon);
+    ImU32 pl_glyph = pl_active ? (pl_hov ? col_hov_icon : col_active_icon) : (pl_hov ? col_hov_icon : col_idle_icon);
     ImU32 file_glyph = file_active ? (file_hov ? col_hov_icon : col_active_icon) : (file_hov ? col_hov_icon : col_idle_icon);
+    ImU32 set_glyph  = set_active  ? (set_hov  ? col_hov_icon : col_active_icon) : (set_hov  ? col_hov_icon : col_idle_icon);
+    ImU32 pal_col    = pal_active  ? (pal_hov  ? col_hov_icon : col_active_icon) : (pal_hov  ? col_hov_icon : col_idle_icon);
     ImU32 user_glyph = user_active ? (user_hov ? col_hov_icon : col_active_icon) : (user_hov ? col_hov_icon : col_idle_icon);
-    float hcx = hx0 + tile * 0.5f;
-    float hcy = hy0 + tile * 0.5f;
-    if (!g_iconHomeTex)
-    {
-        g_iconHomeTex = LoadIconTexture(kIconHomePng, (int)sizeof(kIconHomePng));
-    }
-    if (g_iconHomeTex)
-    {
-        float hisz = 16.0f;
-        dl->AddImage((ImTextureID)g_iconHomeTex, ImVec2(hcx - hisz * 0.5f, hcy - hisz * 0.5f), ImVec2(hcx + hisz * 0.5f, hcy + hisz * 0.5f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), home_glyph);
-    }
-    else
-    {
-        dl->AddTriangleFilled(ImVec2(hcx - 6.0f, hcy + 1.0f), ImVec2(hcx + 6.0f, hcy + 1.0f), ImVec2(hcx, hcy - 5.0f), home_glyph);
-        dl->AddRectFilled(ImVec2(hcx - 4.0f, hcy + 1.0f), ImVec2(hcx + 4.0f, hcy + 6.0f), home_glyph);
-        dl->AddRectFilled(ImVec2(hcx - 1.5f, hcy + 3.5f), ImVec2(hcx + 1.5f, hcy + 6.0f), home_hole);
-    }
-    float scx = sx0 + tile * 0.5f;
-    float scy = sy0 + tile * 0.5f;
-    for (int i = 0; i < 8; i++)
-    {
-        float ang = (float)i * 3.14159265f / 4.0f;
-        float dx = cosf(ang);
-        float dy = sinf(ang);
-        dl->AddLine(ImVec2(scx + dx * 5.0f, scy + dy * 5.0f), ImVec2(scx + dx * 8.0f, scy + dy * 8.0f), set_glyph, 2.5f);
-    }
-    dl->AddCircle(ImVec2(scx, scy), 5.0f, set_glyph, 24, 2.5f);
-    dl->AddCircleFilled(ImVec2(scx, scy), 2.0f, set_hole);
-    float pcx = px0 + tile * 0.5f;
-    float pcy = py0 + tile * 0.5f;
-    if (!g_iconPalTex)
-    {
-        g_iconPalTex = LoadIconTexture(kIconPalPng, (int)sizeof(kIconPalPng));
-    }
-    if (g_iconPalTex)
-    {
-        float pisz = 16.0f;
-        dl->AddImage((ImTextureID)g_iconPalTex, ImVec2(pcx - pisz * 0.5f, pcy - pisz * 0.5f), ImVec2(pcx + pisz * 0.5f, pcy + pisz * 0.5f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), pal_col);
-    }
-    else
-    {
-        dl->AddCircle(ImVec2(pcx, pcy), 6.0f, pal_col, 24, 2.0f);
-        dl->AddCircleFilled(ImVec2(pcx - 3.0f, pcy - 2.0f), 1.3f, pal_col);
-        dl->AddCircleFilled(ImVec2(pcx + 2.5f, pcy - 3.0f), 1.3f, pal_col);
-        dl->AddCircleFilled(ImVec2(pcx + 3.0f, pcy + 2.0f), 1.3f, pal_col);
-        dl->AddCircleFilled(ImVec2(pcx + 3.5f, pcy + 3.5f), 2.0f, (pal_active || pal_hov) ? CtrlHovU32() : CtrlBgU32());
-    }
-    float fcx = fx0 + tile * 0.5f;
-    float fcy = fy0 + tile * 0.5f;
-    if (!g_iconFileTex)
-    {
-        g_iconFileTex = LoadIconTexture(kIconFolderOpenPng, (int)sizeof(kIconFolderOpenPng));
-    }
-    if (g_iconFileTex)
-    {
-        float fisz = 20.0f;
-        dl->AddImage((ImTextureID)g_iconFileTex, ImVec2(fcx - fisz * 0.5f, fcy - fisz * 0.5f), ImVec2(fcx + fisz * 0.5f, fcy + fisz * 0.5f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), file_glyph);
-    }
-    else
-    {
-    float doc_x0 = fcx - 5.0f;
-    float doc_y0 = fcy - 7.0f;
-    float doc_x1 = fcx + 5.0f;
-    float doc_y1 = fcy + 7.0f;
-    float fold = 4.0f;
-    dl->AddLine(ImVec2(doc_x0, doc_y0), ImVec2(doc_x1 - fold, doc_y0), file_glyph, 2.0f);
-    dl->AddLine(ImVec2(doc_x1, doc_y0 + fold), ImVec2(doc_x1, doc_y1), file_glyph, 2.0f);
-    dl->AddLine(ImVec2(doc_x0, doc_y0), ImVec2(doc_x0, doc_y1), file_glyph, 2.0f);
-    dl->AddLine(ImVec2(doc_x0, doc_y1), ImVec2(doc_x1, doc_y1), file_glyph, 2.0f);
-    dl->AddLine(ImVec2(doc_x1 - fold, doc_y0), ImVec2(doc_x1 - fold, doc_y0 + fold), file_glyph, 2.0f);
-    dl->AddLine(ImVec2(doc_x1 - fold, doc_y0 + fold), ImVec2(doc_x1, doc_y0 + fold), file_glyph, 2.0f);
-    dl->AddLine(ImVec2(fcx - 2.5f, fcy - 1.0f), ImVec2(fcx + 2.5f, fcy - 1.0f), file_glyph, 1.5f);
-    dl->AddLine(ImVec2(fcx - 2.5f, fcy + 2.0f), ImVec2(fcx + 2.5f, fcy + 2.0f), file_glyph, 1.5f);
-    dl->AddLine(ImVec2(fcx - 2.5f, fcy + 5.0f), ImVec2(fcx + 1.0f, fcy + 5.0f), file_glyph, 1.5f);
-    }
-    float ucx = ux0 + tile * 0.5f;
-    float ucy = uy0 + tile * 0.5f;
-    if (!g_iconUserTex)
-    {
-        g_iconUserTex = LoadIconTexture(kIconUserPng, (int)sizeof(kIconUserPng));
-    }
-    if (g_iconUserTex)
-    {
-        float uisz = 20.0f;
-        dl->AddImage((ImTextureID)g_iconUserTex, ImVec2(ucx - uisz * 0.5f, ucy - uisz * 0.5f), ImVec2(ucx + uisz * 0.5f, ucy + uisz * 0.5f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), user_glyph);
-    }
-    else
-    {
-    dl->AddCircle(ImVec2(ucx, ucy - 4.0f), 4.0f, user_glyph, 24, 2.0f);
-    dl->PathArcTo(ImVec2(ucx, ucy + 10.0f), 7.0f, 3.14159265f, 3.14159265f * 2.0f);
-    dl->PathStroke(user_glyph, 0, 2.0f);
-    }
+    ImFont* iconF = ImGui::GetFont();
+    auto navIcon = [&](float tx0, float ty0, const char* icon, ImU32 col) {
+        ImVec2 isz = iconF->CalcTextSizeA(16.0f, FLT_MAX, 0.0f, icon);
+        float ix = floorf(tx0 + (tile - isz.x) * 0.5f);
+        float iy = floorf(ty0 + (tile - isz.y) * 0.5f);
+        dl->AddText(iconF, 16.0f, ImVec2(ix, iy), col, icon);
+    };
+    navIcon(hx0, hy0, ICON_FA_HOUSE, home_glyph);
+    navIcon(sx0, sy0, ICON_FA_GEAR, set_glyph);
+    navIcon(px0, py0, ICON_FA_PALETTE, pal_col);
+    navIcon(fx0, fy0, ICON_FA_FOLDER, file_glyph);
+    navIcon(ux0, uy0, ICON_FA_EYE, user_glyph);
+    navIcon(plx0, ply0, ICON_FA_USERS, pl_glyph);
     return g_navBarHov;
 }
 inline void Render()
@@ -4498,7 +4448,7 @@ inline void Render()
             float y = left_min.y + 20.0f;
             cb_hov |= DrawCheckbox(dl, ImVec2(left_min.x + 14.0f, y), &S::aim_enabled, "Enabled", tab_font, 13.0f);
             kb_hov |= DrawKeybind("##aim_key", dl, ImVec2(left_max.x - 14.0f, y), &S::aim_key, &S::aim_key_mode, tab_font, 13.0f);
-            if (S::aim_method == 2)
+            if (S::aim_method == 3)
             {
                 char kb_buf[64];
                 if (g_activeBindId != nullptr && strcmp(g_activeBindId, "##aim_key") == 0)
@@ -4516,11 +4466,14 @@ inline void Render()
             }
             y += kCheckRowPitch;
             {
-                const char* method_items[] = { "Mouse", "Viewport", "Raycast", "Wraith" };
-                dd_hov |= DrawDropdownSingle("##dd_aimmethod", dl, ImVec2(left_min.x + 14.0f, y), col_avail_w, &S::aim_method, method_items, 4, "Method", tab_font, 13.0f);
+                const char* method_items[] = { "Memory", "Mouse", "Viewport", "Raycast", "Wraith" };
+                dd_hov |= DrawDropdownSingle("##dd_aimmethod", dl, ImVec2(left_min.x + 14.0f, y), col_avail_w, &S::aim_method, method_items, 5, "Method", tab_font, 13.0f);
                 y += 37.0f;
                 const char* part_items[] = { "Head", "Torso", "Pelvis", "Left arm", "Right arm", "Left leg", "Right leg" };
                 dd_hov |= DrawDropdownSingle("##dd_aimpart", dl, ImVec2(left_min.x + 14.0f, y), col_avail_w, &S::aim_part, part_items, 7, "Target part", tab_font, 13.0f);
+                y += 37.0f;
+                static const char* const kPriorityItems[] = { "Crosshair", "Distance", "Camera" };
+                dd_hov |= DrawDropdownSingle("##dd_priority", dl, ImVec2(left_min.x + 14.0f, y), col_avail_w, &S::aim_priority, kPriorityItems, 3, "Priority", tab_font, 13.0f);
                 y += 37.0f;
                 sl_hov |= DrawSliderFloat("##sl_aimfov", dl, ImVec2(left_min.x + 14.0f, y), col_avail_w, &S::aim_fov, 10.0f, 500.0f, "Aim FOV", "%.0f", tab_font, 13.0f);
                 y += 33.0f;
@@ -4571,18 +4524,38 @@ inline void Render()
                     kb_hov |= DrawQuestionButton("##qb_aimtracer", dl, ImVec2(right_max.x - qb_right_off, ry), aimtracer_items, 2, tab_font, 13.0f);
                 }
                 ry += kCheckRowPitch;
-                cb_hov |= DrawCheckbox(dl, ImVec2(right_min.x + 14.0f, ry), &S::aim_team_check, "Team check", tab_font, 13.0f);
-                ry += kCheckRowPitch;
-                cb_hov |= DrawCheckbox(dl, ImVec2(right_min.x + 14.0f, ry), &S::aim_visible_check, "Visible check", tab_font, 13.0f);
-                ry += kCheckRowPitch;
-                cb_hov |= DrawCheckbox(dl, ImVec2(right_min.x + 14.0f, ry), &S::aim_bots, "Include bots", tab_font, 13.0f);
-                ry += kCheckRowPitch;
-                cb_hov |= DrawCheckbox(dl, ImVec2(right_min.x + 14.0f, ry), &S::aim_health_check, "Health check", tab_font, 13.0f);
+                cb_hov |= DrawCheckbox(dl, ImVec2(right_min.x + 14.0f, ry), &S::aim_prediction, "Prediction", tab_font, 13.0f);
                 {
-                    QuestionItem hp_items[] = {
-                        MakeQSliderFloat("##q_aimhp", "Max health", &S::aim_health_value, 1.0f, 100.0f, "%.0f")
-                    };
-                    kb_hov |= DrawQuestionButton("##qb_aimhp", dl, ImVec2(right_max.x - 14.0f, ry), hp_items, 1, tab_font, 13.0f);
+                    static const char* const kPredModeItems[] = { "Global", "Fallen", "Dynamic" };
+                    QuestionItem pred_items[8];
+                    int pred_n = 0;
+                    pred_items[pred_n++] = MakeQDropdownSingle("##q_predmode", "Mode", &S::aim_pred_mode, kPredModeItems, 3);
+                    if (S::aim_pred_mode == 1)
+                    {
+                        pred_items[pred_n++] = MakeQDropdownSingle("##q_predweapon", "Weapon", &S::aim_weapon, thenwefuckin::aim::predict::FALLEN_WEAPON_ITEMS, thenwefuckin::aim::predict::FALLEN_WEAPON_COUNT);
+                        pred_items[pred_n++] = MakeQSliderFloat("##q_predbv", "Bullet vel", &S::aim_fallen_bv, -1.0f, 3000.0f, "%.0f");
+                        pred_items[pred_n++] = MakeQSliderFloat("##q_predgrav", "Gravity mult", &S::aim_fallen_grav, 0.0f, 2.0f, "%.2f");
+                        static char predDetBuf[128];
+                        snprintf(predDetBuf, sizeof(predDetBuf), "Detected: %s", thenwefuckin::aim::predict::detected_weapon_name.c_str());
+                        pred_items[pred_n++] = MakeQLabel(predDetBuf);
+                        const thenwefuckin::aim::predict::FallenWeaponBallistics* ball = nullptr;
+                        if (S::aim_weapon > 0 && S::aim_weapon < thenwefuckin::aim::predict::FALLEN_WEAPON_COUNT - 1)
+                            ball = thenwefuckin::aim::predict::fallen_get_weapon_data(thenwefuckin::aim::predict::FALLEN_WEAPON_LIST[(size_t)S::aim_weapon]);
+                        else if (!thenwefuckin::aim::predict::detected_weapon_name.empty() && thenwefuckin::aim::predict::detected_weapon_name != "None")
+                            ball = thenwefuckin::aim::predict::fallen_get_weapon_data(thenwefuckin::aim::predict::detected_weapon_name);
+                        if (ball)
+                        {
+                            static char predBvBuf[128];
+                            snprintf(predBvBuf, sizeof(predBvBuf), "BV: %.0f  Gravity: %.2f", (double)ball->bv, (double)ball->grav);
+                            pred_items[pred_n++] = MakeQLabel(predBvBuf);
+                        }
+                    }
+                    else
+                    {
+                        pred_items[pred_n++] = MakeQSliderFloat("##q_predh", "Height", &S::aim_pred_height, -5.0f, 10.0f, "%.1f");
+                        pred_items[pred_n++] = MakeQSliderFloat("##q_predf", "Forward", &S::aim_pred_forward, -10.0f, 20.0f, "%.1f");
+                    }
+                    kb_hov |= DrawQuestionButton("##qb_pred", dl, ImVec2(right_max.x - 14.0f, ry), pred_items, pred_n, tab_font, 13.0f);
                 }
                 ry += kCheckRowPitch;
                 cb_hov |= DrawCheckbox(dl, ImVec2(right_min.x + 14.0f, ry), &S::aim_distance_check, "Distance check", tab_font, 13.0f);
@@ -4592,6 +4565,20 @@ inline void Render()
                     };
                     kb_hov |= DrawQuestionButton("##qb_aimdist", dl, ImVec2(right_max.x - 14.0f, ry), dist_items, 1, tab_font, 13.0f);
                 }
+                ry += kCheckRowPitch;
+                cb_hov |= DrawCheckbox(dl, ImVec2(right_min.x + 14.0f, ry), &S::aim_health_check, "Health check", tab_font, 13.0f);
+                {
+                    QuestionItem hp_items[] = {
+                        MakeQSliderFloat("##q_aimhp", "Max health", &S::aim_health_value, 1.0f, 100.0f, "%.0f")
+                    };
+                    kb_hov |= DrawQuestionButton("##qb_aimhp", dl, ImVec2(right_max.x - 14.0f, ry), hp_items, 1, tab_font, 13.0f);
+                }
+                ry += kCheckRowPitch;
+                cb_hov |= DrawCheckbox(dl, ImVec2(right_min.x + 14.0f, ry), &S::aim_team_check, "Team check", tab_font, 13.0f);
+                ry += kCheckRowPitch;
+                cb_hov |= DrawCheckbox(dl, ImVec2(right_min.x + 14.0f, ry), &S::aim_visible_check, "Visible check", tab_font, 13.0f);
+                ry += kCheckRowPitch;
+                cb_hov |= DrawCheckbox(dl, ImVec2(right_min.x + 14.0f, ry), &S::aim_bots, "Include bots", tab_font, 13.0f);
                 ry += kCheckRowPitch;
                 cb_hov |= DrawCheckbox(dl, ImVec2(right_min.x + 14.0f, ry), &S::aim_autoshoot, "Auto shoot", tab_font, 13.0f);
                 kb_hov |= DrawKeybind("##autoshoot_key", dl, ImVec2(right_max.x - 14.0f, ry), &S::aim_autoshoot_key, &S::aim_autoshoot_key_mode, tab_font, 13.0f);
@@ -4672,9 +4659,10 @@ inline void Render()
                 reinterpret_cast<ImVec4*>(S::distance_color), &S::distance_outline, reinterpret_cast<ImVec4*>(S::distance_outline_color));
             {
                 QuestionItem dist_items[] = {
-                    MakeQCheckbox("OUTLINE", &S::distance_outline)
+                    MakeQCheckbox("OUTLINE", &S::distance_outline),
+                    MakeQSliderFloat("##q_vismaxdist", "Max distance", &S::visual_maxdist, 100.0f, 10000.0f, "%.0f")
                 };
-                kb_hov |= DrawQuestionButton("##qb_dist", dl, ImVec2(v_left_top_max.x - qb_right_off, y), dist_items, 1, tab_font, 13.0f);
+                kb_hov |= DrawQuestionButton("##qb_dist", dl, ImVec2(v_left_top_max.x - qb_right_off, y), dist_items, 2, tab_font, 13.0f);
             }
             y += kCheckRowPitch;
             cb_hov |= DrawCheckbox(dl, ImVec2(v_left_top_min.x + 14.0f, y), &S::tool_enabled, "Tool", tab_font, 13.0f);
@@ -5565,6 +5553,7 @@ inline std::string BuildConfigPayload(const char* name)
     j.i("aim_key_mode", S::aim_key_mode);
     j.i("aim_method", S::aim_method);
     j.i("aim_part", S::aim_part);
+    j.i("aim_priority", S::aim_priority);
     j.f("aim_fov", (double)S::aim_fov);
     j.b("aim_360", S::aim_360);
     j.b("aim_smoothing_enabled", S::aim_smoothing_enabled);
@@ -5594,6 +5583,13 @@ inline std::string BuildConfigPayload(const char* name)
     j.b("aim_deadzone_enabled", S::aim_deadzone_enabled);
     j.i("aim_deadzone_min", S::aim_deadzone_min);
     j.i("aim_deadzone_max", S::aim_deadzone_max);
+    j.b("aim_prediction", S::aim_prediction);
+    j.i("aim_pred_mode", S::aim_pred_mode);
+    j.f("aim_pred_height", (double)S::aim_pred_height);
+    j.f("aim_pred_forward", (double)S::aim_pred_forward);
+    j.f("aim_fallen_bv", (double)S::aim_fallen_bv);
+    j.f("aim_fallen_grav", (double)S::aim_fallen_grav);
+    j.i("aim_weapon", S::aim_weapon);
     j.b("box_enabled", S::box_enabled);
     j.i("box_mode", S::box_mode);
     j.i("box_style", S::box_style);
@@ -5614,6 +5610,7 @@ inline std::string BuildConfigPayload(const char* name)
     j.f("headdot_thickness", (double)S::headdot_thickness);
     j.b("distance_enabled", S::distance_enabled);
     j.b("distance_outline", S::distance_outline);
+    j.f("visual_maxdist", (double)S::visual_maxdist);
     j.b("tool_enabled", S::tool_enabled);
     j.b("tool_outline", S::tool_outline);
     j.b("tool_distance_check", S::tool_distance_check);
@@ -5727,6 +5724,9 @@ inline std::string BuildConfigPayload(const char* name)
     j.i("nograss_key", S::nograss_key);
     j.i("nograss_key_mode", S::nograss_key_mode);
     j.f("grass_value", (double)S::grass_value);
+    j.b("world_geo_enabled", S::world_geo_enabled);
+    j.i("world_geo_key", S::world_geo_key);
+    j.i("world_geo_key_mode", S::world_geo_key_mode);
     j.b("ambient_enabled", S::ambient_enabled);
     j.i("ambient_key", S::ambient_key);
     j.i("ambient_key_mode", S::ambient_key_mode);
@@ -5939,8 +5939,10 @@ inline bool ApplyConfigRaw(const std::string& raw)
     get_int("aim_key", S::aim_key);
     get_int("aim_key_mode", S::aim_key_mode);
     get_int("aim_method", S::aim_method);
-    if (S::aim_method < 0 || S::aim_method > 3) S::aim_method = 0;
+    if (S::aim_method < 0 || S::aim_method > 4) S::aim_method = 0;
     get_int("aim_part", S::aim_part);
+    get_int("aim_priority", S::aim_priority);
+    if (S::aim_priority < 0 || S::aim_priority > 2) S::aim_priority = 0;
     get_float("aim_fov", S::aim_fov);
     get_bool("aim_360", S::aim_360);
     get_bool("aim_smoothing_enabled", S::aim_smoothing_enabled);
@@ -5971,6 +5973,15 @@ inline bool ApplyConfigRaw(const std::string& raw)
     get_bool("aim_deadzone_enabled", S::aim_deadzone_enabled);
     get_int("aim_deadzone_min", S::aim_deadzone_min);
     get_int("aim_deadzone_max", S::aim_deadzone_max);
+    get_bool("aim_prediction", S::aim_prediction);
+    get_int("aim_pred_mode", S::aim_pred_mode);
+    if (S::aim_pred_mode < 0 || S::aim_pred_mode > 2) S::aim_pred_mode = 0;
+    get_float("aim_pred_height", S::aim_pred_height);
+    get_float("aim_pred_forward", S::aim_pred_forward);
+    get_float("aim_fallen_bv", S::aim_fallen_bv);
+    get_float("aim_fallen_grav", S::aim_fallen_grav);
+    get_int("aim_weapon", S::aim_weapon);
+    if (S::aim_weapon < 0 || S::aim_weapon >= thenwefuckin::aim::predict::FALLEN_WEAPON_COUNT) S::aim_weapon = 0;
     get_bool("box_enabled", S::box_enabled);
     get_int("box_mode", S::box_mode);
     get_int("box_style", S::box_style);
@@ -5991,6 +6002,7 @@ inline bool ApplyConfigRaw(const std::string& raw)
     get_float("headdot_thickness", S::headdot_thickness);
     get_bool("distance_enabled", S::distance_enabled);
     get_bool("distance_outline", S::distance_outline);
+    get_float("visual_maxdist", S::visual_maxdist);
     get_bool("tool_enabled", S::tool_enabled);
     get_bool("tool_outline", S::tool_outline);
     get_bool("tool_distance_check", S::tool_distance_check);
@@ -6099,6 +6111,9 @@ inline bool ApplyConfigRaw(const std::string& raw)
     get_int("nograss_key", S::nograss_key);
     get_int("nograss_key_mode", S::nograss_key_mode);
     get_float("grass_value", S::grass_value);
+    get_bool("world_geo_enabled", S::world_geo_enabled);
+    get_int("world_geo_key", S::world_geo_key);
+    get_int("world_geo_key_mode", S::world_geo_key_mode);
     get_bool("ambient_enabled", S::ambient_enabled);
     get_int("ambient_key", S::ambient_key);
     get_int("ambient_key_mode", S::ambient_key_mode);
@@ -6511,7 +6526,11 @@ inline void RenderSettingsPanel()
             { &g_movementKeysOpt, "KEYS" }
         };
         bool s_mov_qb = DrawQuestionButton("##qb_mov", dl, ImVec2(gmax.x - 14.0f, r6_y), mov_opts, 3, f, 13.0f);
-        float r7_y = r6b_y + kCheckRowPitch + 2.0f;
+        float r6c_y = r6b_y + kCheckRowPitch;
+        bool s6c = DrawCheckbox(dl, ImVec2(gmin.x + 14.0f, r6c_y), &S::world_geo_enabled, "World geo", f, 13.0f);
+        bool s6c_kb = DrawKeybind("##geo_key", dl, ImVec2(gmax.x - 14.0f, r6c_y), &S::world_geo_key, &S::world_geo_key_mode, f, 13.0f);
+        bool s6c_warn = DrawWarnIndicator("##warn_geo", dl, ImVec2(gmax.x - 14.0f - KeybindTextWidth("##geo_key", S::world_geo_key, f) - 8.0f, r6c_y), "This feature may cause lag.", f, 13.0f);
+        float r7_y = r6c_y + kCheckRowPitch + 2.0f;
         static bool s_cfgInited = false;
         if (!s_cfgInited)
         {
@@ -6583,7 +6602,7 @@ inline void RenderSettingsPanel()
         bool overBinds = g_keybinds && (m.x >= g_bindsPos.x && m.x <= g_bindsPos.x + g_bindsSize.x && m.y >= g_bindsPos.y && m.y <= g_bindsPos.y + g_bindsSize.y);
         bool overMove = g_movement && (m.x >= g_movementPos.x && m.x <= g_movementPos.x + g_movementSize.x && m.y >= g_movementPos.y && m.y <= g_movementPos.y + g_movementSize.y);
         bool overDebug = g_internalDebug && (m.x >= g_debugPos.x && m.x <= g_debugPos.x + g_debugSize.x && m.y >= g_debugPos.y && m.y <= g_debugPos.y + g_debugSize.y);
-        bool pcb = s1 || s2 || s4 || s5 || s6 || s_wm_qb || s_mov_qb;
+        bool pcb = s1 || s2 || s4 || s5 || s6 || s6c || s6c_kb || s6c_warn || s_wm_qb || s_mov_qb;
         bool psl = s3;
         bool pdd = s_dd;
         bool pti = s7;
@@ -6880,6 +6899,440 @@ inline void RenderPlayerPreviewPanel()
         DrawGroupBox(dl, omin, omax, "options", f, 13.0f, GroupU32(), BorderU32(), col_outline);
         DrawCheckbox(dl, ImVec2(omin.x + 12.0f, omin.y + 18.0f), &g_previewSpin, "Spin", f, 13.0f);
         DrawCheckbox(dl, ImVec2(omin.x + 12.0f, omin.y + 38.0f), &g_previewAnimateHp, "Animate HP", f, 13.0f);
+    }
+    ImGui::End();
+    ImGui::PopStyleColor(1);
+    ImGui::PopStyleVar(5);
+}
+inline void RenderPlayersPanel()
+{
+    if (!g_playersOpen)
+    {
+        return;
+    }
+    ImGuiIO& io = ImGui::GetIO();
+    if (g_playersPos.x < 0.0f)
+    {
+        ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
+        g_playersPos = ImVec2(center.x + g_menuSize.x * 0.5f + 20.0f, center.y - g_playersSize.y * 0.5f);
+    }
+    ImGui::SetNextWindowSize(g_playersSize, ImGuiCond_Always);
+    ImGui::SetNextWindowPos(g_playersPos, ImGuiCond_Always);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, g_colFrame);
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove;
+    if (ImGui::Begin("##uiplayers", nullptr, flags))
+    {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 pos = ImGui::GetWindowPos();
+        ImVec2 size = ImGui::GetWindowSize();
+        pos.x = floorf(pos.x);
+        pos.y = floorf(pos.y);
+        ImVec2 max = ImVec2(floorf(pos.x + size.x), floorf(pos.y + size.y));
+        const ImU32 col_outline = IM_COL32(0, 0, 0, 255);
+        DrawPixelBox(dl, pos, max, FrameU32(), BorderU32(), col_outline);
+        dl->AddRectFilled(ImVec2(pos.x + 2.0f, pos.y + 2.0f), ImVec2(max.x - 2.0f, pos.y + 3.0f), AccentU32());
+        {
+            ImVec2 m = io.MousePos;
+            bool onBar = (m.x >= pos.x && m.x <= max.x && m.y >= pos.y && m.y <= pos.y + 20.0f);
+            if (!g_playersDragging && onBar && !IsModalActive() && g_activeBindId == nullptr && ImGui::IsMouseClicked(0))
+            {
+                g_playersDragging = true;
+                g_playersDragOff = ImVec2(m.x - g_playersPos.x, m.y - g_playersPos.y);
+            }
+            if (g_playersDragging)
+            {
+                if (ImGui::IsMouseDown(0) && !IsModalActive())
+                {
+                    g_playersPos.x = floorf(m.x - g_playersDragOff.x);
+                    g_playersPos.y = floorf(m.y - g_playersDragOff.y);
+                }
+                else
+                {
+                    g_playersDragging = false;
+                }
+            }
+        }
+        ImFont* f = g_fontSmall ? g_fontSmall : ImGui::GetFont();
+        ImVec2 gmin = ImVec2(pos.x + 14.0f, pos.y + 24.0f);
+        ImVec2 gmax = ImVec2(max.x - 14.0f, max.y - 10.0f);
+        std::vector<std::string> names;
+        std::vector<long long> uids;
+        std::vector<uintptr_t> addrs;
+        std::vector<bool> isLocal;
+        if (thenwefuckin::g_proc && thenwefuckin::g_proc->connected())
+        {
+            auto plist = thenwefuckin::g_ctx.player_list();
+            for (auto& pl : plist)
+            {
+                if (!pl.addr)
+                    continue;
+                std::string nm = pl.name();
+                if (nm.empty())
+                    continue;
+                long long uid = thenwefuckin::g_proc->read<long long>(pl.addr + Offsets::Player::UserId);
+                names.push_back(nm);
+                uids.push_back(uid);
+                addrs.push_back(pl.addr);
+                isLocal.push_back(thenwefuckin::g_ctx.local_player.addr && pl.addr == thenwefuckin::g_ctx.local_player.addr);
+            }
+        }
+        static uintptr_t s_selPlayer = 0;
+        static bool s_selInit = false;
+        {
+            bool stillThere = false;
+            size_t localIdx = names.size();
+            for (size_t i = 0; i < addrs.size(); ++i)
+            {
+                if (addrs[i] == s_selPlayer)
+                    stillThere = true;
+                if (isLocal[i])
+                    localIdx = i;
+            }
+            if (!s_selInit || !stillThere)
+            {
+                if (localIdx < addrs.size())
+                    s_selPlayer = addrs[localIdx];
+                else if (!addrs.empty())
+                    s_selPlayer = addrs[0];
+                else
+                    s_selPlayer = 0;
+                s_selInit = true;
+            }
+        }
+        size_t selIdx = names.size();
+        for (size_t i = 0; i < addrs.size(); ++i)
+        {
+            if (addrs[i] == s_selPlayer)
+            {
+                selIdx = i;
+                break;
+            }
+        }
+        char ptitle[64];
+        snprintf(ptitle, sizeof(ptitle), "players (%d)", (int)names.size());
+        ImVec2 listMax(gmax.x, gmin.y + 290.0f);
+        DrawGroupBox(dl, gmin, listMax, ptitle, f, 13.0f, GroupU32(), BorderU32(), col_outline);
+        {
+            const float rowH = 20.0f;
+            ImVec2 viewMin(gmin.x + 1.0f, gmin.y + 18.0f);
+            ImVec2 viewMax(listMax.x - 1.0f, listMax.y - 5.0f);
+            float contentH = (float)names.size() * rowH;
+            float viewH = viewMax.y - viewMin.y;
+            static float s_plScroll = 0.0f;
+            float maxScroll = (contentH > viewH) ? (contentH - viewH) : 0.0f;
+            if (s_plScroll < 0.0f) s_plScroll = 0.0f;
+            if (s_plScroll > maxScroll) s_plScroll = maxScroll;
+            ImVec2 m2 = io.MousePos;
+            bool inView = (m2.x >= viewMin.x && m2.x <= viewMax.x && m2.y >= viewMin.y && m2.y <= viewMax.y);
+            if (inView && io.MouseWheel != 0.0f && !IsModalActive() && g_activeBindId == nullptr)
+            {
+                s_plScroll -= io.MouseWheel * 28.0f;
+                if (s_plScroll < 0.0f) s_plScroll = 0.0f;
+                if (s_plScroll > maxScroll) s_plScroll = maxScroll;
+            }
+            dl->PushClipRect(viewMin, viewMax, true);
+            float ry = viewMin.y + 2.0f - s_plScroll;
+            for (size_t i = 0; i < names.size(); ++i)
+            {
+                if (ry + rowH >= viewMin.y && ry <= viewMax.y)
+                {
+                    bool rowHov = (m2.x >= viewMin.x && m2.x <= viewMax.x && m2.y >= ry && m2.y <= ry + rowH);
+                    if (rowHov && ImGui::IsMouseClicked(0) && !IsModalActive() && g_activeBindId == nullptr)
+                    {
+                        s_selPlayer = addrs[i];
+                        selIdx = i;
+                        UiClick();
+                    }
+                    if (addrs[i] == s_selPlayer)
+                        dl->AddRectFilled(ImVec2(viewMin.x, ry), ImVec2(viewMax.x, ry + rowH), IM_COL32(255, 255, 255, 18));
+                    float ay = floorf(ry + (rowH - 16.0f) * 0.5f);
+                    ID3D11ShaderResourceView* srv = thenwefuckin::visual::players::avatars::avatar_for(uids[i]);
+                    if (srv)
+                    {
+                        dl->AddImage((ImTextureID)srv, ImVec2(gmin.x + 12.0f, ay), ImVec2(gmin.x + 28.0f, ay + 16.0f));
+                    }
+                    else
+                    {
+                        dl->AddCircle(ImVec2(gmin.x + 20.0f, ay + 8.0f), 6.0f, TextDimU32(), 20, 1.5f);
+                    }
+                    ImU32 tcol = (addrs[i] == s_selPlayer || isLocal[i]) ? AccentU32() : TextU32();
+                    DrawOutlinedText(dl, f, 13.0f, ImVec2(gmin.x + 34.0f, floorf(ry + (rowH - 13.0f) * 0.5f)), tcol, col_outline, names[i].c_str());
+                }
+                ry += rowH;
+            }
+            dl->PopClipRect();
+        }
+        {
+            float cardY = listMax.y + 45.0f;
+            float cardX = gmin.x + 12.0f;
+            float row2Y = gmax.y - 10.0f - 20.0f;
+            float row1Y = row2Y - 6.0f - 20.0f;
+            DrawGroupBox(dl, ImVec2(gmin.x, cardY - 20.0f), ImVec2(gmax.x, row2Y + 20.0f + 8.0f), "Previewed player", f, 13.0f, GroupU32(), BorderU32(), col_outline);
+            std::string selName = (selIdx < names.size()) ? names[selIdx] : "-";
+            long long selUid = (selIdx < uids.size()) ? uids[selIdx] : 0;
+            bool selLocal = (selIdx < isLocal.size()) ? isLocal[selIdx] : false;
+            float selMeters = -1.0f;
+            if (selIdx < addrs.size() && addrs[selIdx] && thenwefuckin::g_proc && thenwefuckin::g_proc->connected())
+            {
+                thenwefuckin::node ch = thenwefuckin::g_ctx.get_character(thenwefuckin::node{ addrs[selIdx] });
+                if (ch)
+                {
+                    thenwefuckin::node hrp = ch.find_child("HumanoidRootPart");
+                    if (!hrp)
+                        hrp = ch.find_child("Head");
+                    if (hrp)
+                    {
+                        uintptr_t prim = hrp.primitive();
+                        if (prim)
+                        {
+                            thenwefuckin::math::vec3 p = thenwefuckin::g_proc->read<thenwefuckin::math::vec3>(prim + Offsets::Primitive::Position);
+                            if (!(p.x == 0.0f && p.y == 0.0f && p.z == 0.0f))
+                                selMeters = (p - thenwefuckin::g_ctx.local_pos).length() * 0.28f;
+                        }
+                    }
+                }
+            }
+            ImVec2 v3Min(cardX, cardY);
+            ImVec2 v3Max(cardX + 200.0f, row1Y - 8.0f);
+            if (v3Max.y < v3Min.y + 60.0f) v3Max.y = v3Min.y + 60.0f;
+            thenwefuckin::visual::preview::render_for(selUid, dl, v3Min, v3Max);
+            float tx = cardX + 200.0f + 10.0f;
+            float rx = gmax.x - 8.0f;
+            {
+                ID3D11ShaderResourceView* headSrv = thenwefuckin::visual::players::avatars::avatar_for(selUid);
+                if (headSrv)
+                {
+                    dl->AddImage((ImTextureID)headSrv, ImVec2(tx, cardY + 2.0f), ImVec2(tx + 20.0f, cardY + 22.0f));
+                    DrawOutlinedText(dl, f, 13.0f, ImVec2(tx + 26.0f, cardY + 4.0f), selLocal ? AccentU32() : TextU32(), col_outline, selName.c_str());
+                }
+                else
+                {
+                    DrawOutlinedText(dl, f, 13.0f, ImVec2(tx, cardY + 2.0f), selLocal ? AccentU32() : TextU32(), col_outline, selName.c_str());
+                }
+            }
+            uintptr_t selPlayerAddr = (selIdx < addrs.size()) ? addrs[selIdx] : 0;
+            char subBuf[64];
+            bool spectatingSub = selPlayerAddr && thenwefuckin::misc::spectate::is_spectating(selPlayerAddr);
+            if (selMeters >= 0.0f && selLocal)
+                snprintf(subBuf, sizeof(subBuf), "%.1fm  local", (double)selMeters);
+            else if (selMeters >= 0.0f && spectatingSub)
+                snprintf(subBuf, sizeof(subBuf), "%.1fm  spectating", (double)selMeters);
+            else if (selMeters >= 0.0f)
+                snprintf(subBuf, sizeof(subBuf), "%.1fm", (double)selMeters);
+            else if (spectatingSub)
+                snprintf(subBuf, sizeof(subBuf), "spectating");
+            else if (selLocal)
+                snprintf(subBuf, sizeof(subBuf), "local");
+            else
+                snprintf(subBuf, sizeof(subBuf), "-");
+            DrawOutlinedText(dl, f, 12.0f, ImVec2(tx, cardY + 26.0f), TextDimU32(), col_outline, subBuf);
+            // Live stats for selected player: HP, state (idle/walking/running...), speed, tool, team, armor.
+            float selHp = -1.0f, selMaxHp = 100.0f, selSpeed = -1.0f;
+            std::string selState = "-";
+            std::string selToolStr = "-";
+            std::string selTeamStr = "-";
+            bool selShield = false;
+            bool selDead = false;
+            uintptr_t selPlayerAddr2 = selPlayerAddr;
+            if (selPlayerAddr2 && thenwefuckin::g_proc && thenwefuckin::g_proc->connected())
+            {
+                thenwefuckin::node selPl{ selPlayerAddr2 };
+                thenwefuckin::node selCh = thenwefuckin::g_ctx.get_character(selPl);
+                if (selCh)
+                {
+                    float hp = 0.0f, mx = 0.0f;
+                    thenwefuckin::node hum = thenwefuckin::find_live_humanoid(selCh, &hp, &mx);
+                    if (hum)
+                    {
+                        selHp = hp;
+                        selMaxHp = (mx > 0.0f) ? mx : 100.0f;
+                        selDead = (hp <= 0.0f);
+                    }
+                    thenwefuckin::node tool = selCh.find_child_of_class("Tool");
+                    if (tool && !tool.name().empty())
+                        selToolStr = tool.name();
+                    if (selCh.find_child_of_class("ForceField"))
+                        selShield = true;
+                    uintptr_t teamAddr = thenwefuckin::g_proc->read<uintptr_t>(selPl.addr + Offsets::Player::Team);
+                    if (teamAddr)
+                    {
+                        std::string tm = thenwefuckin::node{ teamAddr }.name();
+                        if (!tm.empty())
+                            selTeamStr = tm;
+                    }
+                    thenwefuckin::node hrp = selCh.find_child("HumanoidRootPart");
+                    uintptr_t humAddr = hum.addr;
+                    if (humAddr)
+                    {
+                        uintptr_t seat = thenwefuckin::g_proc->read<uintptr_t>(humAddr + Offsets::Humanoid::SeatPart);
+                        uint8_t plat = thenwefuckin::g_proc->read<uint8_t>(humAddr + Offsets::Humanoid::PlatformStand);
+                        if (selDead)
+                            selState = "Dead";
+                        else if (seat != 0)
+                            selState = "Seated";
+                        else if (plat != 0)
+                            selState = "Platform";
+                        else if (hrp)
+                        {
+                            uintptr_t prim = hrp.primitive();
+                            if (prim)
+                            {
+                                thenwefuckin::math::vec3 vel = thenwefuckin::g_proc->read<thenwefuckin::math::vec3>(prim + Offsets::Primitive::AssemblyLinearVelocity);
+                                if (vel.x != 0.0f || vel.y != 0.0f || vel.z != 0.0f)
+                                {
+                                    float hs = sqrtf(vel.x * vel.x + vel.z * vel.z);
+                                    selSpeed = hs;
+                                    if (fabsf(vel.y) > 8.0f)
+                                        selState = (vel.y > 0.0f) ? "Jumping" : "Falling";
+                                    else if (hs < 1.0f)
+                                        selState = "Idle";
+                                    else if (hs < 9.0f)
+                                        selState = "Walking";
+                                    else
+                                        selState = "Running";
+                                }
+                                else
+                                {
+                                    selState = "Idle";
+                                    selSpeed = 0.0f;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            auto trunc_stat = [](const std::string& v, size_t n) -> std::string {
+                if (v.size() <= n) return v;
+                if (n <= 2) return v.substr(0, n);
+                return v.substr(0, n - 2) + "..";
+            };
+            float sy = cardY + 44.0f;
+            float statW = rx - tx;
+            if (statW < 60.0f) statW = 60.0f;
+            // HP & ARMOR
+            {
+                char hpTxt[32];
+                float frac = -1.0f;
+                if (selHp >= 0.0f && selMaxHp > 0.0f)
+                {
+                    frac = selHp / selMaxHp;
+                    if (frac < 0.0f) frac = 0.0f;
+                    if (frac > 1.0f) frac = 1.0f;
+                    snprintf(hpTxt, sizeof(hpTxt), "%.0f/%.0f", (double)selHp, (double)selMaxHp);
+                }
+                else
+                {
+                    snprintf(hpTxt, sizeof(hpTxt), "-");
+                }
+                DrawOutlinedText(dl, f, 11.0f, ImVec2(tx, sy), TextDimU32(), col_outline, "HP & ARMOR");
+                ImVec2 hts = f->CalcTextSizeA(11.0f, FLT_MAX, 0.0f, hpTxt);
+                DrawOutlinedText(dl, f, 11.0f, ImVec2(rx - hts.x, sy), TextU32(), col_outline, hpTxt);
+                ImVec2 b0(tx, sy + 14.0f), b1(rx, sy + 20.0f);
+                dl->AddRectFilled(b0, b1, IM_COL32(12, 12, 14, 255));
+                if (frac >= 0.0f)
+                {
+                    ImU32 fc = (frac > 0.5f) ? IM_COL32(90, 220, 120, 255) : (frac > 0.25f ? IM_COL32(240, 200, 80, 255) : IM_COL32(235, 90, 90, 255));
+                    if (frac > 0.0f)
+                        dl->AddRectFilled(b0, ImVec2(b0.x + (b1.x - b0.x) * frac, b1.y), fc);
+                }
+                dl->AddRect(b0, b1, IM_COL32(0, 0, 0, 255));
+                // Armor bar right under health: blue when they have anything on (ForceField shield).
+                ImVec2 a0(tx, sy + 22.0f), a1(rx, sy + 28.0f);
+                dl->AddRectFilled(a0, a1, IM_COL32(12, 12, 14, 255));
+                if (selShield)
+                    dl->AddRectFilled(a0, a1, IM_COL32(90, 200, 255, 255));
+                dl->AddRect(a0, a1, IM_COL32(0, 0, 0, 255));
+                if (selShield)
+                {
+                    ImVec2 sts = f->CalcTextSizeA(10.0f, FLT_MAX, 0.0f, "Shield");
+                    DrawOutlinedText(dl, f, 10.0f, ImVec2(rx - sts.x, sy + 30.0f), IM_COL32(140, 220, 255, 255), col_outline, "Shield");
+                }
+                sy += 44.0f;
+            }
+            // State (+ speed)
+            {
+                char stTxt[64];
+                if (selSpeed >= 0.0f && (selState == "Walking" || selState == "Running" || selState == "Idle"))
+                    snprintf(stTxt, sizeof(stTxt), "%s %.1f", selState.c_str(), (double)selSpeed);
+                else
+                    snprintf(stTxt, sizeof(stTxt), "%s", selState.c_str());
+                DrawOutlinedText(dl, f, 11.0f, ImVec2(tx, sy), TextDimU32(), col_outline, "STATE");
+                ImU32 stCol = selDead ? IM_COL32(235, 90, 90, 255) : TextU32();
+                DrawOutlinedText(dl, f, 12.0f, ImVec2(tx, sy + 11.0f), stCol, col_outline, stTxt);
+                sy += 27.0f;
+            }
+            // Tool
+            {
+                DrawOutlinedText(dl, f, 11.0f, ImVec2(tx, sy), TextDimU32(), col_outline, "TOOL");
+                std::string tv = trunc_stat(selToolStr, 18);
+                DrawOutlinedText(dl, f, 12.0f, ImVec2(tx, sy + 11.0f), TextU32(), col_outline, tv.c_str());
+                sy += 27.0f;
+            }
+            // Team
+            {
+                DrawOutlinedText(dl, f, 11.0f, ImVec2(tx, sy), TextDimU32(), col_outline, "TEAM");
+                std::string tv = trunc_stat(selTeamStr, 18);
+                DrawOutlinedText(dl, f, 12.0f, ImVec2(tx, sy + 11.0f), TextU32(), col_outline, tv.c_str());
+                sy += 27.0f;
+            }
+            float by = row1Y;
+            float bw = floorf((gmax.x - 12.0f - cardX - 3.0f * 6.0f) / 4.0f);
+            bool bFr = false, bSp = false, bTp = false, bTg = false;
+            bool selFriend = selPlayerAddr && thenwefuckin::visual::players::friends::is_friend(selPlayerAddr);
+            if (DrawButton(dl, ImVec2(cardX, by), bw, 20.0f, selFriend ? "unfriend" : "friend", f, 13.0f, &bFr))
+            {
+                if (selPlayerAddr)
+                {
+                    uintptr_t selModel = 0;
+                    thenwefuckin::node ch = thenwefuckin::g_ctx.get_character(thenwefuckin::node{ selPlayerAddr });
+                    if (ch)
+                        selModel = ch.addr;
+                    thenwefuckin::visual::players::friends::set_friend(selPlayerAddr, selModel, !selFriend);
+                }
+                UiClick();
+            }
+            bool spectatingSel = selPlayerAddr && thenwefuckin::misc::spectate::is_spectating(selPlayerAddr);
+            if (DrawButton(dl, ImVec2(cardX + (bw + 6.0f), by), bw, 20.0f, spectatingSel ? "unspectate" : "spectate", f, 13.0f, &bSp))
+            {
+                if (selPlayerAddr)
+                    thenwefuckin::misc::spectate::toggle(selPlayerAddr);
+                UiClick();
+            }
+            if (DrawButton(dl, ImVec2(cardX + (bw + 6.0f) * 2.0f, by), bw, 20.0f, "teleport", f, 13.0f, &bTp))
+            {
+                if (selPlayerAddr)
+                    thenwefuckin::misc::spectate::teleport_to(selPlayerAddr);
+                UiClick();
+            }
+            DrawButton(dl, ImVec2(cardX + (bw + 6.0f) * 3.0f, by), bw, 20.0f, "target", f, 13.0f, &bTg);
+            float by2 = row2Y;
+            float bw2 = floorf((gmax.x - 12.0f - cardX - 6.0f) * 0.5f);
+            bool bCp = false, bRf = false;
+            if (DrawButton(dl, ImVec2(cardX, by2), bw2, 20.0f, "copy id", f, 13.0f, &bCp))
+            {
+                if (selUid > 0)
+                {
+                    char idBuf[32];
+                    snprintf(idBuf, sizeof(idBuf), "%lld", selUid);
+                    ImGui::SetClipboardText(idBuf);
+                }
+                else if (!selName.empty() && selName != "-")
+                {
+                    ImGui::SetClipboardText(selName.c_str());
+                }
+                UiClick();
+            }
+            if (DrawButton(dl, ImVec2(cardX + bw2 + 6.0f, by2), bw2, 20.0f, "refresh", f, 13.0f, &bRf))
+            {
+                thenwefuckin::visual::preview::refresh();
+                UiClick();
+            }
+        }
     }
     ImGui::End();
     ImGui::PopStyleColor(1);

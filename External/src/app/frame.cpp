@@ -15,6 +15,7 @@
 #include "../features/visual/world/tools/tools.h"
 #include "../features/visual/world/crates/crates.h"
 #include "../features/visual/world/keycards/keycards.h"
+#include "../features/visual/world/geo/geo.h"
 #include "../features/aim/core/aim.h"
 #include "../features/misc/core/misc.h"
 #include <cmath>
@@ -268,6 +269,7 @@ void thenwefuckin::frame::tick(ImDrawList* dl, int width, int height, float fps,
     Menu::RenderThemePanel();
     Menu::RenderExplorerPanel();
     Menu::RenderPlayerPreviewPanel();
+    Menu::RenderPlayersPanel();
     Menu::g_dbgMsMenu = qema(Menu::g_dbgMsMenu, qms(t0));
     t0 = qnow();
     if (needGame)
@@ -285,6 +287,7 @@ void thenwefuckin::frame::tick(ImDrawList* dl, int width, int height, float fps,
         thenwefuckin::tools::tick(dl, width, height);
         thenwefuckin::crates::tick(dl, width, height);
         thenwefuckin::keycards::tick(dl, width, height);
+        thenwefuckin::worldgeo::tick(dl, width, height);
     }
     Menu::g_dbgMsAim = qema(Menu::g_dbgMsAim, qms(t0));
     t0 = qnow();

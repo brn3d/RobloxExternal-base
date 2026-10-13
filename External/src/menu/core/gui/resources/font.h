@@ -1,6 +1,7 @@
 #pragma once
 #include <stddef.h>
 #include "../../../imgui/imgui.h"
+#include "../../../menu/resources/font.h"
 static const unsigned int kInconsolataTtfSize = 105628;
 static const unsigned char kInconsolataTtf[] = {
     0x00,0x01,0x00,0x00,0x00,0x12,0x01,0x00,0x00,0x04,0x00,0x20,0x44,0x53,0x49,0x47,
@@ -6620,5 +6621,16 @@ static inline void LoadFonts()
     {
         io.FontDefault = font;
     }
+    static const ImWchar iconRanges[] = { 0xf013, 0xf013, 0xf015, 0xf015, 0xf06e, 0xf06e, 0xf07b, 0xf07b, 0xf0c0, 0xf0c0, 0xf121, 0xf121, 0xf53f, 0xf53f, 0 };
+    ImFontConfig iconCfg;
+    iconCfg.FontDataOwnedByAtlas = false;
+    iconCfg.MergeMode = true;
+    iconCfg.PixelSnapH = true;
+    iconCfg.OversampleH = 2;
+    iconCfg.OversampleV = 2;
+    io.Fonts->AddFontFromMemoryCompressedTTF(
+        fa6_solid_compressed_data, (int)fa6_solid_compressed_size, 16.0f, &iconCfg, iconRanges);
     g_fontSmall = io.Fonts->AddFontFromMemoryTTF((void*)kInconsolataTtf, (int)kInconsolataTtfSize, 13.0f, &cfg);
+    io.Fonts->AddFontFromMemoryCompressedTTF(
+        fa6_solid_compressed_data, (int)fa6_solid_compressed_size, 13.0f, &iconCfg, iconRanges);
 }

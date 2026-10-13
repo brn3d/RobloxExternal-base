@@ -39,6 +39,7 @@ namespace thenwefuckin::settings
     inline float distance_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
     inline bool  distance_outline = true;
     inline float distance_outline_color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    inline float visual_maxdist = 10000.0f;
     inline bool  tool_enabled = false;
     inline float tool_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
     inline bool  tool_outline = true;
@@ -88,6 +89,7 @@ namespace thenwefuckin::settings
     inline int   aim_method = 0;
     inline bool  aim_360 = false;
     inline int   aim_part = 0;
+    inline int   aim_priority = 0;
     inline float aim_fov = 150.0f;
     inline bool  aim_smoothing_enabled = false;
     inline float aim_smoothing = 5.0f;
@@ -96,6 +98,13 @@ namespace thenwefuckin::settings
     inline bool  aim_deadzone_enabled = false;
     inline int   aim_deadzone_min = 3;
     inline int   aim_deadzone_max = 10;
+    inline bool  aim_prediction = true;
+    inline int   aim_pred_mode = 0;
+    inline float aim_pred_height = 0.0f;
+    inline float aim_pred_forward = 0.0f;
+    inline float aim_fallen_bv = -1.0f;
+    inline float aim_fallen_grav = 0.0f;
+    inline int   aim_weapon = 0;
     inline bool  aim_show_fov = false;
     inline int   aim_fov_style = 0;
     inline bool  vis_team_check = false;
@@ -265,6 +274,9 @@ namespace thenwefuckin::settings
     };
     inline bool  world_tools_name[7] = { true, true, true, true, true, true, true };
     inline bool  world_tools_dist[7] = { true, true, true, true, true, true, true };
+    inline bool  world_geo_enabled = false;
+    inline int   world_geo_key = 0;
+    inline int   world_geo_key_mode = 2;
     inline bool  world_crates_enabled = false;
     inline int   world_crates_key = 0;
     inline int   world_crates_key_mode = 2;
@@ -303,6 +315,7 @@ namespace thenwefuckin::settings
         aim_360 = false;
         aim_smoothing_enabled = false;
         aim_deadzone_enabled = false;
+        aim_prediction = false;
         aim_show_fov = false;
         aim_fov_fill = false;
         aim_fov_outline = false;
@@ -343,6 +356,7 @@ namespace thenwefuckin::settings
         world_tools_enabled = false;
         world_crates_enabled = false;
         world_keycards_enabled = false;
+        world_geo_enabled = false;
     }
     inline struct SavedFeatures
     {
@@ -364,6 +378,7 @@ namespace thenwefuckin::settings
         bool aim_360 = false;
         bool aim_smoothing = false;
         bool aim_deadzone = false;
+        bool aimpred = false;
         bool aim_show_fov = false;
         bool aim_fov_fill = false;
         bool aim_fov_outline = false;
@@ -404,6 +419,7 @@ namespace thenwefuckin::settings
         bool world_keycards = false;
         bool world_tools = false;
         bool world_crates = false;
+        bool world_geo = false;
     } saved;
     inline void push_state()
     {
@@ -426,6 +442,7 @@ namespace thenwefuckin::settings
         saved.aim_360 = aim_360;
         saved.aim_smoothing = aim_smoothing_enabled;
         saved.aim_deadzone = aim_deadzone_enabled;
+        saved.aimpred = aim_prediction;
         saved.aim_show_fov = aim_show_fov;
         saved.aim_fov_fill = aim_fov_fill;
         saved.aim_fov_outline = aim_fov_outline;
@@ -466,6 +483,7 @@ namespace thenwefuckin::settings
         saved.world_keycards = world_keycards_enabled;
         saved.world_tools = world_tools_enabled;
         saved.world_crates = world_crates_enabled;
+        saved.world_geo = world_geo_enabled;
     }
     inline bool restore_state()
     {
@@ -482,7 +500,8 @@ namespace thenwefuckin::settings
             || saved.fullbright || saved.noshadow || saved.nograss
             || saved.antiafk || saved.nofall
             || saved.world_ore || saved.world_plant || saved.world_bots
-            || saved.world_animals || saved.world_tools || saved.world_crates || saved.world_keycards;
+            || saved.world_animals || saved.world_tools || saved.world_crates || saved.world_keycards
+            || saved.world_geo;
         box_enabled = box_enabled || saved.box;
         skeleton_enabled = skeleton_enabled || saved.skeleton;
         health_enabled = health_enabled || saved.health;
@@ -500,6 +519,7 @@ namespace thenwefuckin::settings
         aim_360 = aim_360 || saved.aim_360;
         aim_smoothing_enabled = aim_smoothing_enabled || saved.aim_smoothing;
         aim_deadzone_enabled = aim_deadzone_enabled || saved.aim_deadzone;
+        aim_prediction = aim_prediction || saved.aimpred;
         aim_show_fov = aim_show_fov || saved.aim_show_fov;
         aim_fov_fill = aim_fov_fill || saved.aim_fov_fill;
         aim_fov_outline = aim_fov_outline || saved.aim_fov_outline;
@@ -540,6 +560,7 @@ namespace thenwefuckin::settings
         world_keycards_enabled = world_keycards_enabled || saved.world_keycards;
         world_tools_enabled = world_tools_enabled || saved.world_tools;
         world_crates_enabled = world_crates_enabled || saved.world_crates;
+        world_geo_enabled = world_geo_enabled || saved.world_geo;
         saved.valid = false;
         return any;
     }

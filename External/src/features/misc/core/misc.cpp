@@ -7,6 +7,7 @@
 #include "../hitsound/hitsound.h"
 #include "../noclip/noclip.h"
 #include "../fly/fly.h"
+#include "../spectate/spectate.h"
 #include "../hipheight/hipheight.h"
 #include "../infjump/infjump.h"
 #include "../../visual/world/time/time.h"
@@ -22,6 +23,7 @@ namespace thenwefuckin::misc
         hitsound::run();
         noclip::run();
         fly::run();
+        spectate::run();
         hipheight::run();
         infjump::run();
         world::time::run();

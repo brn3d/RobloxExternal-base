@@ -92,7 +92,7 @@ void Overlay::Run()
         SetVSync(g_vsync);
         SetStreamProof(g_streamProof);
         {
-            bool vis = m_menuOpen || g_menuOpen || !Menu::g_navHidden || Menu::g_settingsOpen || Menu::g_themeOpen || Menu::g_explorerOpen || Menu::g_playerPreviewOpen;
+            bool vis = m_menuOpen || g_menuOpen || !Menu::g_navHidden || Menu::g_settingsOpen || Menu::g_themeOpen || Menu::g_explorerOpen || Menu::g_playersOpen || Menu::g_playerPreviewOpen;
             static bool lastVis = false;
             static bool firstVis = true;
             if (firstVis || vis != lastVis)
@@ -198,13 +198,14 @@ void Overlay::ToggleMenu()
     {
         return;
     }
-    bool anyVisible = s_instance->m_menuOpen || g_menuOpen || !Menu::g_navHidden || Menu::g_settingsOpen || Menu::g_themeOpen || Menu::g_explorerOpen || Menu::g_playerPreviewOpen;
+    bool anyVisible = s_instance->m_menuOpen || g_menuOpen || !Menu::g_navHidden || Menu::g_settingsOpen || Menu::g_themeOpen || Menu::g_explorerOpen || Menu::g_playersOpen || Menu::g_playerPreviewOpen;
     bool open = !anyVisible;
     if (!open)
     {
         Menu::g_settingsOpen = false;
         Menu::g_themeOpen = false;
         Menu::g_explorerOpen = false;
+        Menu::g_playersOpen = false;
         Menu::g_playerPreviewOpen = false;
         Menu::g_navHidden = true;
     }

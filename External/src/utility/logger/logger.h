@@ -73,7 +73,7 @@ namespace Logger {
         file.open(path, std::ios::out | std::ios::app);
         initialized = true;
         if (file.is_open()) file << "\n========== thenwefuckin log start " << now_str() << " ==========\n" << std::flush;
-        prune_old_crashes(desk);
+        prune_old_crashes(desk + "\\Desktop");
     }
     inline void log(const std::string& tag, const std::string& msg) {
         if (!initialized) init();
@@ -92,14 +92,29 @@ namespace Logger {
         va_list ap; va_start(ap, fmt); vsnprintf(buf, sizeof(buf), fmt, ap); va_end(ap);
         log(tag, buf);
     }
-    inline void write_crash(EXCEPTION_POINTERS* ep, const char* source) {
-        if (crashActive.exchange(true)) return;
-        std::lock_guard<std::mutex> lk(mtx);
+    // force=true bypasses the one-report-per-run gate (used for foreign/
+    // driver-thread faults so every single one lands in its own .crash file).
+    inline void write_crash(EXCEPTION_POINTERS* ep, const char* source, bool force = false) {
+        if (!force && crashActive.exchange(true)) return;
+        std::unique_lock<std::mutex> lk(mtx, std::defer_lock);
+        if (force)
+        {
+            // The faulting thread might be holding the log mutex itself;
+            // never deadlock it - just skip the report then.
+            if (!lk.try_lock()) return;
+        }
+        else
+        {
+            lk.lock();
+        }
         char* up = nullptr; size_t len = 0;
         _dupenv_s(&up, &len, "USERPROFILE");
         std::string desk = up ? std::string(up) : "C:\\Users\\Public";
         if (up) free(up);
-        crashPath = desk + "\\Desktop\\thenwefuckin_" + stamp_file() + ".crash";
+        std::string tag;
+        if (source && std::string(source).find("foreign") != std::string::npos)
+            tag = "_foreign";
+        crashPath = desk + "\\Desktop\\thenwefuckin_" + stamp_file() + tag + ".crash";
         char exePath[MAX_PATH]={0};
         GetModuleFileNameA(nullptr, exePath, MAX_PATH);
         std::string exeDir = exePath;
@@ -122,6 +137,31 @@ namespace Logger {
                 out << "params: " << ep->ExceptionRecord->NumberParameters;
                 for (DWORD i=0;i<ep->ExceptionRecord->NumberParameters;i++) out << " 0x" << std::hex << ep->ExceptionRecord->ExceptionInformation[i] << std::dec;
                 out << "\n";
+            }
+            {
+                // Which module actually faulted - saves guessing next time.
+                std::string faultMod = "?";
+                if (ep && ep->ExceptionRecord)
+                {
+                    auto addr = (uintptr_t)ep->ExceptionRecord->ExceptionAddress;
+                    HMODULE mods[256]; DWORD need = 0;
+                    HANDLE proc = GetCurrentProcess();
+                    if (EnumProcessModules(proc, mods, sizeof(mods), &need))
+                    {
+                        for (size_t i = 0; i < need / sizeof(HMODULE); i++)
+                        {
+                            MODULEINFO mi{}; GetModuleInformation(proc, mods[i], &mi, sizeof(mi));
+                            auto base = (uintptr_t)mi.lpBaseOfDll;
+                            if (addr >= base && addr < base + mi.SizeOfImage)
+                            {
+                                char name[MAX_PATH] = {0}; GetModuleFileNameA(mods[i], name, MAX_PATH);
+                                faultMod = name;
+                                break;
+                            }
+                        }
+                    }
+                }
+                out << "fault module: " << faultMod << "\n";
             }
             if (ep && ep->ContextRecord) {
 #ifdef _M_X64
@@ -180,6 +220,27 @@ namespace Logger {
 #define LOGF(tag, fmt, ...) Logger::logf(tag, fmt, __VA_ARGS__)
 inline LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     if (IsDebuggerPresent()) return EXCEPTION_CONTINUE_SEARCH;
+    // Same rule as the VEH in main.cpp: a faulting address outside our own exe
+    // belongs to a third-party module (driver/overlay). Don't pop our crash
+    // dialog for those.
+    if (ep && ep->ExceptionRecord)
+    {
+        HMODULE self = GetModuleHandleW(nullptr);
+        MODULEINFO mi{};
+        if (self && GetModuleInformation(GetCurrentProcess(), self, &mi, sizeof(mi)))
+        {
+            auto base = (uintptr_t)mi.lpBaseOfDll;
+            auto addr = (uintptr_t)ep->ExceptionRecord->ExceptionAddress;
+            if (addr < base || addr >= base + (uintptr_t)mi.SizeOfImage)
+            {
+                // Foreign fault reaching the UEF: still save it, then let the
+                // system have it (no dialog from us for driver faults).
+                Logger::write_crash(ep, "UEF-foreign", true);
+                if (Logger::file.is_open()) Logger::file.flush();
+                return EXCEPTION_CONTINUE_SEARCH;
+            }
+        }
+    }
     Logger::log("CRASH", "unhandled exception!");
     if (ep && ep->ExceptionRecord) {
         char buf[256]; snprintf(buf, sizeof(buf), "code=0x%08X addr=0x%p", (unsigned)ep->ExceptionRecord->ExceptionCode, ep->ExceptionRecord->ExceptionAddress);

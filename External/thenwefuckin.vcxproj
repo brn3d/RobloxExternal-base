@@ -153,8 +153,12 @@
     <ClInclude Include="src\menu\imgui\imstb_truetype.h" />
     <ClInclude Include="src\features\aim\autoshoot\autoshoot.h" />
     <ClInclude Include="src\features\aim\core\aim.h" />
+    <ClInclude Include="src\features\aim\predict\predict.h" />
+    <ClInclude Include="src\features\visual\players\avatars.h" />
+    <ClInclude Include="src\features\visual\players\friends.h" />
     <ClInclude Include="src\features\aim\distance\distance.h" />
     <ClInclude Include="src\features\aim\health\health.h" />
+    <ClInclude Include="src\features\aim\memory\memory.h" />
     <ClInclude Include="src\features\aim\mouse\mouse.h" />
     <ClInclude Include="src\features\aim\smooth\smooth.h" />
     <ClInclude Include="src\features\aim\tracking\tracking.h" />
@@ -171,6 +175,7 @@
     <ClInclude Include="src\features\misc\zoom\zoom.h" />
     <ClInclude Include="src\features\misc\noclip\noclip.h" />
     <ClInclude Include="src\features\misc\freecam\freecam.h" />
+    <ClInclude Include="src\features\misc\spectate\spectate.h" />
     <ClInclude Include="src\features\misc\gravity\gravity.h" />
     <ClInclude Include="src\features\misc\hipheight\hipheight.h" />
     <ClInclude Include="src\features\misc\infjump\infjump.h" />
@@ -232,8 +237,12 @@
     <ClCompile Include="src\menu\imgui\imgui_widgets.cpp" />
     <ClCompile Include="src\features\aim\autoshoot\autoshoot.cpp" />
     <ClCompile Include="src\features\aim\core\aim.cpp" />
+    <ClCompile Include="src\features\aim\predict\predict.cpp" />
+    <ClCompile Include="src\features\visual\players\avatars.cpp" />
+    <ClCompile Include="src\features\visual\players\friends.cpp" />
     <ClCompile Include="src\features\aim\distance\distance.cpp" />
     <ClCompile Include="src\features\aim\health\health.cpp" />
+    <ClCompile Include="src\features\aim\memory\memory.cpp" />
     <ClCompile Include="src\features\aim\mouse\mouse.cpp" />
     <ClCompile Include="src\features\aim\smooth\smooth.cpp" />
     <ClCompile Include="src\features\aim\tracking\tracking.cpp" />
@@ -249,7 +258,9 @@
     <ClCompile Include="src\features\misc\zoom\zoom.cpp" />
     <ClCompile Include="src\features\misc\noclip\noclip.cpp" />
     <ClCompile Include="src\features\misc\fly\fly.cpp" />
+    <ClCompile Include="src\features\visual\world\geo\geo.cpp" />
     <ClCompile Include="src\features\misc\freecam\freecam.cpp" />
+    <ClCompile Include="src\features\misc\spectate\spectate.cpp" />
     <ClCompile Include="src\features\misc\gravity\gravity.cpp" />
     <ClCompile Include="src\features\misc\hipheight\hipheight.cpp" />
     <ClCompile Include="src\features\misc\infjump\infjump.cpp" />
