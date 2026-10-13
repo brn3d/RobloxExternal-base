@@ -2,7 +2,6 @@
 #include "../../../utility/cache/cache.h"
 #include "../../../menu/overlay/settings.h"
 #include "../../../menu/core/gui/menu.h"
-
 namespace thenwefuckin::misc::noclip
 {
     static void set_collide(node character, bool collide)
@@ -24,40 +23,32 @@ namespace thenwefuckin::misc::noclip
             g_proc->write<uint8_t>(prim + Offsets::Primitive::PrimitiveFlags, next);
         }
     }
-
     void run()
     {
         static bool wasEnabled = false;
-
         bool active = settings::noclip_enabled;
         if (active && settings::noclip_key != 0)
         {
             active = Menu::IsMenuKeyActive("##noclip_key", settings::noclip_key, settings::noclip_key_mode);
         }
-
         if (!active && !wasEnabled)
             return;
-
         if (!g_proc || !g_proc->connected())
         {
             wasEnabled = false;
             return;
         }
-
         if (!g_ctx.ready)
             return;
-
         node character = g_ctx.get_character(g_ctx.local_player);
         if (!character)
             return;
-
         if (!active)
         {
             set_collide(character, true);
             wasEnabled = false;
             return;
         }
-
         set_collide(character, false);
         wasEnabled = true;
     }

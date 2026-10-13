@@ -7,7 +7,6 @@
 #include <chrono>
 #include <cstdio>
 #include <thread>
-
 namespace thenwefuckin::session
 {
     void stage_watcher(std::atomic<bool>& stop) {

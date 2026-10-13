@@ -8,20 +8,20 @@
 #include "../utility/struct/offsets.h"
 #include "../utility/global/globals.h"
 #include "../features/visual/core/visual.h"
-#include "../features/visual/world/ore.h"
-#include "../features/visual/world/plants.h"
-#include "../features/visual/world/bots.h"
-#include "../features/visual/world/animals.h"
-#include "../features/visual/world/tools.h"
-#include "../features/visual/world/crates.h"
-#include "../features/visual/world/keycards.h"
+#include "../features/visual/world/ore/ore.h"
+#include "../features/visual/world/plants/plants.h"
+#include "../features/visual/world/bots/bots.h"
+#include "../features/visual/world/animals/animals.h"
+#include "../features/visual/world/tools/tools.h"
+#include "../features/visual/world/crates/crates.h"
+#include "../features/visual/world/keycards/keycards.h"
 #include "../features/aim/core/aim.h"
 #include "../features/misc/core/misc.h"
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <chrono>
 #include <string>
-
 static void PrintDebugLines(float fps)
 {
     using namespace thenwefuckin;
@@ -35,20 +35,18 @@ static void PrintDebugLines(float fps)
     std::string lpName = g_ctx.local_player ? g_ctx.local_player.name() : "none";
     size_t plCount = g_ctx.player_list().size();
     math::vec3 pos = g_ctx.local_pos;
-
     LOGF("debug", "FPS: %5.1f | PID: %u Base: 0x%llX | DM: 0x%llX WS: 0x%llX | Players(%s): %zu (0x%llX) | Local: %s | Pos: (%.1f, %.1f, %.1f) Speed: %.1f | Ready: %d",
         fps, pid, (unsigned long long)base, (unsigned long long)dm, (unsigned long long)ws,
         plName.c_str(), plCount, (unsigned long long)pl,
         lpName.c_str(), pos.x, pos.y, pos.z, g_localSpeed, g_ctx.ready ? 1 : 0);
 }
-
 static bool NeedsGameData()
 {
     using namespace thenwefuckin;
     return settings::aim_enabled
         || settings::aim_autoshoot
         || settings::aim_show_fov
-        || settings::box_enabled
+         || settings::box_enabled
         || settings::skeleton_enabled
         || settings::health_enabled
         || settings::name_enabled
@@ -60,17 +58,25 @@ static bool NeedsGameData()
         || settings::flags_health
         || settings::tracer_enabled
         || settings::oof_enabled
-        || settings::walkspeed_enabled
-        || settings::jumppower_enabled
-        || settings::fov_enabled
+         || settings::walkspeed_enabled
+         || settings::jumppower_enabled
+         || settings::gravity_enabled
+         || settings::fov_enabled
+         || settings::zoom_enabled
         || settings::noclip_enabled
          || settings::freecam_enabled
          || settings::hipheight_enabled
         || settings::infjump_enabled
         || settings::hitsound_enabled
-        || settings::time_enabled
-        || settings::world_fog_enabled
-        || settings::world_exposure_enabled
+         || settings::time_enabled
+         || settings::night_enabled
+         || settings::ambient_enabled
+         || settings::world_fog_enabled
+         || settings::world_exposure_enabled
+         || settings::fullbright_enabled
+         || settings::noshadow_enabled
+         || settings::nograss_enabled
+         || settings::nofall_enabled
         || settings::world_ore_enabled
         || settings::world_plant_enabled
         || settings::world_bots_enabled
@@ -79,7 +85,6 @@ static bool NeedsGameData()
         || settings::world_crates_enabled
         || settings::world_keycards_enabled;
 }
-
 static bool AnyGameFeatureActive()
 {
     using namespace thenwefuckin;
@@ -89,56 +94,53 @@ static bool AnyGameFeatureActive()
             || Menu::g_explorerOpen
             || Menu::g_playerPreviewOpen;
 }
-
 void thenwefuckin::frame::tick(ImDrawList* dl, int width, int height, float fps, bool menuOpen)
 {
     (void)menuOpen;
     app::g_firstFrame.store(true);
-
     static double lastAttachTry = -10.0;
     static double lastRefresh = -10.0;
     static double lastPfCache = -10.0;
-    double now = ImGui::GetTime();
-
+    static const auto steadyEpoch = std::chrono::steady_clock::now();
+    double now = std::chrono::duration<double>(std::chrono::steady_clock::now() - steadyEpoch).count();
     bool needGame = NeedsGameData();
     bool overlayActive = needGame || Menu::g_movement || Menu::g_explorerOpen || Menu::g_playerPreviewOpen;
-
     static LARGE_INTEGER qpf{};
     if (!qpf.QuadPart) QueryPerformanceFrequency(&qpf);
     auto qnow = []() { LARGE_INTEGER c; QueryPerformanceCounter(&c); return c; };
     auto qms = [&](LARGE_INTEGER s) { LARGE_INTEGER e; QueryPerformanceCounter(&e); return (e.QuadPart - s.QuadPart) * 1000.0 / (double)qpf.QuadPart; };
     auto qema = [](double prev, double v) { return prev * 0.92 + v * 0.08; };
     LARGE_INTEGER t0 = qnow();
-
     if ((!thenwefuckin::g_proc || !thenwefuckin::g_proc->connected()))
     {
+        thenwefuckin::g_ctx.reset();
         if (now - lastAttachTry > 2.0)
         {
             lastAttachTry = now;
             thenwefuckin::g_proc->attach("RobloxPlayerBeta.exe");
         }
     }
-    else if (needGame)
-    {
-
-        if (now - lastRefresh >= 0.008)
-        {
-            lastRefresh = now;
-
-            thenwefuckin::g_ctx.refresh();
-
-            thenwefuckin::math::vec3 lv = thenwefuckin::g_ctx.local_velocity;
-            bool ok = thenwefuckin::g_ctx.ready && thenwefuckin::g_ctx.local_root
-                      && std::isfinite(lv.x) && std::isfinite(lv.y) && std::isfinite(lv.z);
-            g_localSpeed = ok ? sqrtf(lv.x * lv.x + lv.z * lv.z) : -1.0f;
-        }
-    }
     else
     {
-        g_localSpeed = -1.0f;
+        double refreshInterval = needGame ? 0.008 : 0.25;
+        if (now - lastRefresh >= refreshInterval)
+        {
+            lastRefresh = now;
+            thenwefuckin::g_ctx.refresh();
+            if (needGame)
+            {
+                thenwefuckin::math::vec3 lv = thenwefuckin::g_ctx.local_velocity;
+                bool ok = thenwefuckin::g_ctx.ready && thenwefuckin::g_ctx.local_root
+                          && std::isfinite(lv.x) && std::isfinite(lv.y) && std::isfinite(lv.z);
+                g_localSpeed = ok ? sqrtf(lv.x * lv.x + lv.z * lv.z) : -1.0f;
+            }
+        }
+        if (!needGame)
+        {
+            g_localSpeed = -1.0f;
+        }
     }
     Menu::g_dbgMsRefresh = qema(Menu::g_dbgMsRefresh, qms(t0));
-
     t0 = qnow();
     if (thenwefuckin::g_proc && thenwefuckin::g_proc->connected() && now - lastPfCache >= 0.016)
     {
@@ -146,7 +148,6 @@ void thenwefuckin::frame::tick(ImDrawList* dl, int width, int height, float fps,
         PfCache::update();
     }
     Menu::g_dbgMsPf = qema(Menu::g_dbgMsPf, qms(t0));
-
     {
         using namespace thenwefuckin;
         static double lastSessionCheck = -10.0;
@@ -175,6 +176,7 @@ void thenwefuckin::frame::tick(ImDrawList* dl, int width, int height, float fps,
                 {
                     settings::push_state();
                     settings::disable_all();
+                    thenwefuckin::visual::on_game_joined();
                     app::badge("left", app::C_YELLOW, "disconnected - all features disabled");
                     LOG("game", "disconnected - all features disabled");
                     Logger::note_session("disconnected");
@@ -207,7 +209,6 @@ void thenwefuckin::frame::tick(ImDrawList* dl, int width, int height, float fps,
             }
             else if (place != 0 && dmAddr != 0 && dmAddr != s_dm)
             {
-
                 s_dm = dmAddr; s_zeroCount = 0;
                 thenwefuckin::visual::on_game_joined();
                 char jb[128];
@@ -222,6 +223,7 @@ void thenwefuckin::frame::tick(ImDrawList* dl, int width, int height, float fps,
                 {
                     settings::push_state();
                     settings::disable_all();
+                    thenwefuckin::visual::on_game_joined();
                     char lb[96];
                     snprintf(lb, sizeof(lb), "left %llu - all features disabled", (unsigned long long)s_place);
                     app::badge("left", app::C_YELLOW, lb);
@@ -233,22 +235,28 @@ void thenwefuckin::frame::tick(ImDrawList* dl, int width, int height, float fps,
             else s_zeroCount = 0;
         }
     }
-
     bool anythingToDraw = g_menuOpen || Menu::g_watermark || Menu::g_keybinds
                           || Menu::g_movement || Menu::g_internalDebug || overlayActive;
     Overlay::SetRenderEnabled(anythingToDraw);
-
     Overlay::SetFrameInterval(0.0f);
-
+    if (!dl)
+    {
+        if (needGame)
+        {
+            if (settings::aim_enabled || settings::aim_autoshoot)
+                pcache::update();
+            thenwefuckin::aim::run(width, height);
+        }
+        thenwefuckin::misc::run();
+        return;
+    }
     static double lastDebugBuild = -10.0;
     if (Menu::g_internalDebug && now - lastDebugBuild >= 1.0)
     {
         lastDebugBuild = now;
         PrintDebugLines(fps);
     }
-
     Logger::quiet = true;
-
     t0 = qnow();
     Menu::RenderWatermark(dl, width, fps);
     Menu::RenderKeybinds(dl, width, height);
@@ -261,12 +269,15 @@ void thenwefuckin::frame::tick(ImDrawList* dl, int width, int height, float fps,
     Menu::RenderExplorerPanel();
     Menu::RenderPlayerPreviewPanel();
     Menu::g_dbgMsMenu = qema(Menu::g_dbgMsMenu, qms(t0));
-
     t0 = qnow();
     if (needGame)
     {
+        if (settings::aim_enabled || settings::aim_autoshoot)
+            pcache::update();
         thenwefuckin::aim::run(width, height);
+        LARGE_INTEGER tv0 = qnow();
         thenwefuckin::visual::render(dl, width, height);
+        Menu::g_dbgMsVisual = qema(Menu::g_dbgMsVisual, qms(tv0));
         thenwefuckin::ore::tick(dl, width, height);
         thenwefuckin::plants::tick(dl, width, height);
         thenwefuckin::bots::tick(dl, width, height);
@@ -276,14 +287,6 @@ void thenwefuckin::frame::tick(ImDrawList* dl, int width, int height, float fps,
         thenwefuckin::keycards::tick(dl, width, height);
     }
     Menu::g_dbgMsAim = qema(Menu::g_dbgMsAim, qms(t0));
-
-    t0 = qnow();
-    if (needGame)
-    {
-        thenwefuckin::visual::render(dl, width, height);
-    }
-    Menu::g_dbgMsVisual = qema(Menu::g_dbgMsVisual, qms(t0));
-
     t0 = qnow();
     thenwefuckin::misc::run();
     Menu::g_dbgMsMisc = qema(Menu::g_dbgMsMisc, qms(t0));

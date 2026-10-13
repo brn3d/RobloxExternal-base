@@ -7,15 +7,12 @@
 #include <cstdlib>
 #include <exception>
 #include <iostream>
-
 bool g_menuOpen = false;
 bool g_vsync = false;
 bool g_streamProof = false;
 int g_fpsCap = 0;
 float g_localSpeed = -1.0f;
-
 namespace {
-
 bool is_admin() {
     BOOL admin = FALSE;
     SID_IDENTIFIER_AUTHORITY nt = SECURITY_NT_AUTHORITY;
@@ -27,7 +24,6 @@ bool is_admin() {
     }
     return admin != FALSE;
 }
-
 void relaunch_as_admin() {
     wchar_t exe[MAX_PATH]{};
     GetModuleFileNameW(nullptr, exe, MAX_PATH);
@@ -39,7 +35,6 @@ void relaunch_as_admin() {
     if (!ShellExecuteExW(&sei))
         thenwefuckin::app::badge("priv", thenwefuckin::app::C_RED, "elevation declined - run thenwefuckin.exe as administrator");
 }
-
 void on_terminate() {
     Logger::log("CRASH", "std::terminate (unhandled C++ exception?)");
     Logger::write_crash(nullptr, "terminate");
@@ -49,7 +44,6 @@ void on_terminate() {
 void __cdecl on_invalid_param(const wchar_t*, const wchar_t*, const wchar_t*, unsigned int, uintptr_t) {
     Logger::log("CRASH", "invalid CRT parameter");
     Logger::write_crash(nullptr, "invalid_parameter");
-
 }
 void __cdecl on_purecall() {
     Logger::log("CRASH", "pure virtual function call");
@@ -62,9 +56,7 @@ void on_sigabrt(int) {
     Logger::write_crash(nullptr, "abort");
     _exit(3);
 }
-
 }
-
 int main()
 {
     using namespace thenwefuckin::app;
@@ -90,18 +82,15 @@ int main()
     _set_abort_behavior(0, _WRITE_ABORT_MSG);
     Logger::quiet = true;
     Logger::init();
-
     thenwefuckin::syscalls::init();
     LOG("boot", thenwefuckin::syscalls::ready()
         ? "memory path: direct syscalls (NtReadVirtualMemory/NtWriteVirtualMemory)"
         : "memory path: RPM/WPM fallback (syscall init failed)");
     SetConsoleTitleA("thenwefuckin");
-
     std::cout << "\n";
     badge("thenwefuckin", C_CYAN, "external - INSERT to open menu");
     badge("discord", C_WHITE, "discord.gg/thenwefuckin");
     std::cout << "\n";
-
     HANDLE mutex = CreateMutexW(nullptr, FALSE, L"thenwefuckin-overlay-mutex");
     if (GetLastError() == ERROR_ALREADY_EXISTS)
     {
@@ -110,7 +99,6 @@ int main()
         if (mutex) CloseHandle(mutex);
         return 0;
     }
-
     if (!is_admin()) {
         badge("priv", C_YELLOW, "administrator required - relaunching elevated...");
         relaunch_as_admin();
@@ -120,7 +108,6 @@ int main()
     badge("priv", C_GREEN, "running as administrator");
     badge("attaching", C_GREEN, "waiting for RobloxPlayerBeta.exe...");
     LOG("boot", "session start");
-
     int rc = thenwefuckin::app::run();
     if (mutex) CloseHandle(mutex);
     return rc;

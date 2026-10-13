@@ -13,12 +13,10 @@
 #include <atomic>
 #include <iostream>
 #include <thread>
-
 namespace thenwefuckin::app
 {
     std::atomic<bool> g_overlayReady{ false };
     std::atomic<bool> g_firstFrame{ false };
-
     void badge(const char* label, WORD labelColor, const char* msg) {
         HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
         CONSOLE_SCREEN_BUFFER_INFO old{};
@@ -34,18 +32,26 @@ namespace thenwefuckin::app
         std::cout << msg << "\n";
         SetConsoleTextAttribute(h, old.wAttributes);
     }
-
     int run()
     {
+        thenwefuckin::syscalls::init();
+        if (thenwefuckin::syscalls::ready())
+        {
+            badge("syscall", C_GREEN, "direct syscalls active (rax.asm)");
+            LOG("boot", "direct syscalls active");
+        }
+        else
+        {
+            badge("syscall", C_YELLOW, "direct syscalls unavailable, using RPM/WPM fallback");
+            LOG("boot", "syscall fallback mode");
+        }
         std::atomic<bool> stopWatcher{ false };
         std::thread watcher(session::stage_watcher, std::ref(stopWatcher));
         std::atomic<bool> stopTargetWatch{ false };
         std::thread targetWatch(session::target_watcher, std::ref(stopTargetWatch));
-
         OverlayConfig cfg;
         cfg.windowTitle = L" ";
         cfg.targetWindow = L"";
-
         Overlay overlay(cfg);
         if (!overlay.Initialize())
         {
@@ -59,18 +65,14 @@ namespace thenwefuckin::app
             return 1;
         }
         g_overlayReady.store(true);
-
         overlay.SetRenderCallback([](ImDrawList* dl, int width, int height, float fps, bool menuOpen) {
             frame::tick(dl, width, height, fps, menuOpen);
         });
-
         overlay.SetVSync(g_vsync);
         overlay.SetStreamProof(g_streamProof);
         Overlay::SetMenuOpen(true);
-
         std::atomic<bool> stopFreecam{ false };
         std::thread freecamThread(thenwefuckin::misc::freecam::thread_main, std::ref(stopFreecam));
-
         overlay.Run();
         stopFreecam.store(true, std::memory_order_relaxed);
         if (freecamThread.joinable()) freecamThread.join();

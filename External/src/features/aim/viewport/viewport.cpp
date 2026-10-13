@@ -13,8 +13,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <mutex>
 #include <vector>
-
 namespace thenwefuckin::aim::viewport
 {
     namespace
@@ -25,7 +25,6 @@ namespace thenwefuckin::aim::viewport
             std::int16_t y = 0;
         };
         static_assert(sizeof(Vec2i16) == 4, "viewport pair must be 4 bytes");
-
         std::atomic<bool> g_active{ false };
         std::atomic<bool> g_stop{ false };
         std::atomic<bool> g_spoofed{ false };
@@ -35,7 +34,6 @@ namespace thenwefuckin::aim::viewport
         float g_dims_x = 0.f, g_dims_y = 0.f;
         Vec2i16 g_last{};
         int g_fails = 0;
-
         bool get_scene(float view[16], float& dw, float& dh)
         {
             uint64_t base = g_proc ? g_proc->base() : 0;
@@ -48,7 +46,6 @@ namespace thenwefuckin::aim::viewport
             dh = g_proc->read<float>(ve + Offsets::VisualEngine::Dimensions + sizeof(float));
             return (dw >= 1.f && dh >= 1.f);
         }
-
         bool world_to_screen(const math::vec3& pos, float view[16], float dw, float dh, float& sx, float& sy)
         {
             float x = pos.x * view[0] + pos.y * view[1] + pos.z * view[2] + view[3];
@@ -60,7 +57,6 @@ namespace thenwefuckin::aim::viewport
             sy = (dh * 0.5f) * (1.0f - y * inv);
             return (sx > 0.f && sy > 0.f && sx < dw && sy < dh);
         }
-
         Vec2i16 calc_viewport(float tx, float ty, float dw, float dh, float mx, float my)
         {
             constexpr double kMaxShift = 0.65;
@@ -85,11 +81,9 @@ namespace thenwefuckin::aim::viewport
             if (vx < 1.0) vx = 1.0;
             return { (std::int16_t)std::lround(vx), (std::int16_t)std::lround(vy) };
         }
-
         HWND s_hwnd = nullptr;
         float s_cw = 0.f, s_ch = 0.f;
         std::chrono::steady_clock::time_point s_lastWnd{};
-
         bool get_mouse_in_viewport(float dw, float dh, float& mx, float& my)
         {
             auto now = std::chrono::steady_clock::now();
@@ -116,14 +110,12 @@ namespace thenwefuckin::aim::viewport
             if (my < 1.f) my = 1.f;
             return true;
         }
-
         void write_viewport(uintptr_t cam, const Vec2i16& v)
         {
             if (!cam || !g_proc) return;
             g_proc->write<Vec2i16>(cam + Offsets::Camera::ViewportInt16, v);
             g_spoofed.store(true, std::memory_order_release);
         }
-
         void restore_viewport()
         {
             if (!g_cam || g_dims_x < 1.f || g_dims_y < 1.f || !g_proc) return;
@@ -133,7 +125,6 @@ namespace thenwefuckin::aim::viewport
             };
             g_proc->write<Vec2i16>(g_cam + Offsets::Camera::ViewportInt16, v);
         }
-
         bool compute(Vec2i16& out)
         {
             if (!g_ctx.camera.addr) return false;
@@ -155,7 +146,6 @@ namespace thenwefuckin::aim::viewport
             g_dims_y = dh;
             return true;
         }
-
         DWORD WINAPI writer_thread(LPVOID)
         {
             SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
@@ -198,13 +188,12 @@ namespace thenwefuckin::aim::viewport
                     on = false;
                     g_fails = 0;
                 }
-                Sleep(2);
+                Sleep(4);
             }
             restore_viewport();
             g_spoofed.store(false, std::memory_order_release);
             return 0;
         }
-
         void ensure_thread()
         {
             if (g_thread) return;
@@ -213,7 +202,6 @@ namespace thenwefuckin::aim::viewport
             if (g_thread)
                 SetThreadPriority(g_thread, THREAD_PRIORITY_NORMAL);
         }
-
         void set_target(const math::vec3& world)
         {
             ensure_thread();
@@ -222,56 +210,74 @@ namespace thenwefuckin::aim::viewport
             g_tz.store(world.z, std::memory_order_relaxed);
             g_active.store(true, std::memory_order_release);
         }
-
         struct CachedTarget
         {
             uintptr_t playerAddr = 0;
             uintptr_t characterAddr = 0;
             uintptr_t humanoidAddr = 0;
             uintptr_t targetPrim = 0;
+            uintptr_t teamAddr = 0;
             int partIdx = -1;
+            bool isBot = false;
+            float botHp = 100.0f;
         };
-
         std::vector<CachedTarget> s_targets;
         std::chrono::steady_clock::time_point s_lastResolve{};
         std::chrono::steady_clock::time_point s_lastScan{};
-
         void resolve_targets()
         {
             s_targets.clear();
             int wantPart = settings::aim_part;
-            auto list = g_ctx.player_list();
-            s_targets.reserve(list.size());
-            for (auto& entry : list)
+            std::vector<pcache::Entry> snap;
             {
-                if (entry.addr == g_ctx.local_player.addr)
+                std::lock_guard<std::mutex> lk(pcache::mtx);
+                snap = pcache::entries;
+            }
+            s_targets.reserve(snap.size());
+            std::uintptr_t localAddr = g_ctx.local_player.addr;
+            for (auto& e : snap)
+            {
+                if (!e.valid || e.player == localAddr)
                     continue;
-                node character = g_ctx.get_character(entry);
-                if (!character)
+                if (!e.humanoid)
                     continue;
-                uintptr_t charAddr = character.addr;
-                node humanoid = find_live_humanoid(character);
-                if (!humanoid)
-                    continue;
-                node targetPart = resolve_part(character, wantPart);
-                if (!targetPart)
-                    targetPart = character.find_child("Head");
-                if (!targetPart)
-                    continue;
-                uintptr_t prim = targetPart.primitive();
+                std::uintptr_t prim = pcache::aim_prim(e.lc, wantPart);
                 if (!prim)
                     continue;
                 CachedTarget t{};
-                t.playerAddr = entry.addr;
-                t.characterAddr = charAddr;
-                t.humanoidAddr = humanoid.addr;
+                t.playerAddr = e.player;
+                t.characterAddr = e.model;
+                t.humanoidAddr = e.humanoid;
                 t.targetPrim = prim;
+                t.teamAddr = e.team;
                 t.partIdx = wantPart;
                 s_targets.push_back(t);
             }
+            if (settings::aim_bots)
+            {
+                std::vector<BotAimTarget> bots;
+                collect_bot_targets(bots);
+                for (auto& b : bots)
+                {
+                    std::uintptr_t prim = (wantPart == 0) ? b.headPrim : b.rootPrim;
+                    if (!prim)
+                        prim = b.headPrim ? b.headPrim : b.rootPrim;
+                    if (!prim)
+                        continue;
+                    CachedTarget t{};
+                    t.playerAddr = b.inst;
+                    t.characterAddr = b.inst;
+                    t.humanoidAddr = b.humanoid;
+                    t.targetPrim = prim;
+                    t.teamAddr = 0;
+                    t.partIdx = wantPart;
+                    t.isBot = true;
+                    t.botHp = b.hp;
+                    s_targets.push_back(t);
+                }
+            }
         }
     }
-
     void clear()
     {
         g_active.store(false, std::memory_order_release);
@@ -280,7 +286,19 @@ namespace thenwefuckin::aim::viewport
             g_spoofed.store(false, std::memory_order_release);
         }
     }
-
+    void on_game_joined()
+    {
+        g_active.store(false, std::memory_order_release);
+        g_spoofed.store(false, std::memory_order_release);
+        g_cam = 0;
+        g_dims_x = 0.f;
+        g_dims_y = 0.f;
+        g_last = {};
+        g_fails = 0;
+        s_targets.clear();
+        s_lastResolve = std::chrono::steady_clock::time_point{};
+        s_lastScan = std::chrono::steady_clock::time_point{};
+    }
     void shutdown()
     {
         g_active.store(false, std::memory_order_release);
@@ -293,13 +311,11 @@ namespace thenwefuckin::aim::viewport
         g_cam = 0;
         g_dims_x = g_dims_y = 0.f;
     }
-
     bool is_active()
     {
         return g_active.load(std::memory_order_acquire) &&
                g_spoofed.load(std::memory_order_acquire);
     }
-
     void run(int w, int h)
     {
         if (!g_ctx.ready || !g_ctx.camera || w <= 0 || h <= 0)
@@ -308,12 +324,10 @@ namespace thenwefuckin::aim::viewport
             thenwefuckin::aim::clear_debug_target();
             return;
         }
-
         auto now = std::chrono::steady_clock::now();
-        if (now - s_lastScan < std::chrono::milliseconds(4))
+        if (now - s_lastScan < std::chrono::milliseconds(8))
             return;
         s_lastScan = now;
-
         if (pftarget::active())
         {
             pftarget::PfBest b{};
@@ -327,7 +341,6 @@ namespace thenwefuckin::aim::viewport
             set_target(b.world);
             return;
         }
-
         int wantPart = settings::aim_part;
         if (s_targets.empty()
             || now - s_lastResolve >= std::chrono::milliseconds(200)
@@ -342,37 +355,47 @@ namespace thenwefuckin::aim::viewport
                 return;
             }
         }
-
         float cx = static_cast<float>(w) * 0.5f;
         float cy = static_cast<float>(h) * 0.5f;
         const math::view_matrix& view = g_ctx.view;
-
         math::vec3 camPos = g_proc->read<math::vec3>(g_ctx.camera.addr + Offsets::Camera::Position);
         if (camPos.x == 0.0f && camPos.y == 0.0f && camPos.z == 0.0f)
             return;
-
         math::vec3 best{};
         bool found = false;
-        float bestDist = settings::aim_fov;
+        const bool wide = settings::aim_360;
+        float bestDist = wide ? 1e9f : settings::aim_fov;
         uintptr_t bestPlayer = 0;
-
+        const uintptr_t localTeam = thenwefuckin::aim::local_team_addr();
         for (auto& t : s_targets)
         {
-            uintptr_t charAddr = g_proc->read<uintptr_t>(t.playerAddr + Offsets::Player::ModelInstance);
-            if (charAddr != t.characterAddr)
+            if (thenwefuckin::aim::should_skip_teammate(localTeam, t.teamAddr))
+                continue;
+            if (t.isBot)
             {
-                tracking::clear(t.playerAddr);
-                continue;
+                std::uintptr_t par = g_proc->read<std::uintptr_t>(t.characterAddr + Offsets::Instance::Parent);
+                if (!par)
+                    continue;
+                float bhp = t.humanoidAddr ? g_proc->read<float>(t.humanoidAddr + Offsets::Humanoid::Health) : t.botHp;
+                if (!health::check(bhp))
+                    continue;
             }
-            float hp = g_proc->read<float>(t.humanoidAddr + Offsets::Humanoid::Health);
-            if (!health::check(hp))
-                continue;
+            else
+            {
+                uintptr_t charAddr = g_proc->read<uintptr_t>(t.playerAddr + Offsets::Player::ModelInstance);
+                if (charAddr != t.characterAddr)
+                {
+                    tracking::clear(t.playerAddr);
+                    continue;
+                }
+                float hp = g_proc->read<float>(t.humanoidAddr + Offsets::Humanoid::Health);
+                if (!health::check(hp))
+                    continue;
+            }
             math::vec3 pos = g_proc->read<math::vec3>(t.targetPrim + Offsets::Primitive::Position);
             if (pos.x == 0.0f && pos.y == 0.0f && pos.z == 0.0f)
                 continue;
-
             tracking::push(t.playerAddr, pos.x, pos.y, pos.z);
-
             if (!distance::check(pos, camPos))
                 continue;
             math::vec2 s{};
@@ -380,7 +403,7 @@ namespace thenwefuckin::aim::viewport
                 continue;
             float dx = s.x - cx;
             float dy = s.y - cy;
-            float d = sqrtf(dx * dx + dy * dy);
+            float d = wide ? (pos - camPos).length() : sqrtf(dx * dx + dy * dy);
             if (d < bestDist)
             {
                 bestDist = d;
@@ -389,14 +412,12 @@ namespace thenwefuckin::aim::viewport
                 found = true;
             }
         }
-
         if (!found)
         {
             clear();
             thenwefuckin::aim::clear_debug_target();
             return;
         }
-
         {
             float scanDt = 0.004f;
             float smoothLag = 0.0f;
@@ -407,7 +428,6 @@ namespace thenwefuckin::aim::viewport
                 smoothLag = (sx - 1.0f) * scanDt;
             }
             float leadT = scanDt + smoothLag;
-
             tracking::Velocity tv{};
             if (bestPlayer && tracking::sample(bestPlayer, tv))
             {
@@ -419,7 +439,6 @@ namespace thenwefuckin::aim::viewport
                 best.z += (tv.vz - lv.z) * leadT * damp;
             }
         }
-
         thenwefuckin::aim::set_debug_target(best, bestPlayer);
         set_target(best);
     }

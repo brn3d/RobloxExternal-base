@@ -18,11 +18,9 @@
 #include <cstring>
 #include <chrono>
 #include <cstddef>
-
 #ifndef CFG_CALL_TARGET_VALID
 #define CFG_CALL_TARGET_VALID 0x00000001
 #endif
-
 namespace thenwefuckin::aim::raycast
 {
     namespace
@@ -30,7 +28,6 @@ namespace thenwefuckin::aim::raycast
         constexpr std::uintptr_t desc_rva_z = Offsets::WorldRoot::RaycastBoundDesc;
         constexpr std::uintptr_t bound_fn_offset = Offsets::WorldRoot::RaycastBoundFn;
         constexpr std::size_t k_stub_bytes = 0x200;
-
 #pragma pack(push, 4)
         struct RaycastState
         {
@@ -43,11 +40,9 @@ namespace thenwefuckin::aim::raycast
             std::uint64_t calls = 0;
         };
 #pragma pack(pop)
-
         static_assert(offsetof(RaycastState, active) == 0x00, "active");
         static_assert(offsetof(RaycastState, target_x) == 0x08, "target");
         static_assert(offsetof(RaycastState, calls) == 0x18, "calls");
-
         struct Hook
         {
             std::uintptr_t thunk = 0;
@@ -58,12 +53,10 @@ namespace thenwefuckin::aim::raycast
             bool installed = false;
             bool active = false;
         };
-
         Hook g_hook{};
         bool g_wallbang = false;
         auto g_lastFail = std::chrono::steady_clock::time_point{};
         char g_status[80] = "idle: hook not requested";
-
         void set_status(const char* s)
         {
             if (!s || !s[0]) return;
@@ -72,31 +65,26 @@ namespace thenwefuckin::aim::raycast
             memcpy(g_status, s, n);
             g_status[n] = '\0';
         }
-
         bool ok_addr(std::uintptr_t a)
         {
             return a >= 0x10000ull && a < 0x00007FFFFFFFFFFFull;
         }
-
         bool connected()
         {
             return g_proc && g_proc->connected();
         }
-
         std::uintptr_t ray_alloc(std::size_t n, DWORD prot)
         {
             if (!connected())
                 return 0;
             return (std::uintptr_t)VirtualAllocEx(g_proc->raw(), nullptr, n, MEM_COMMIT | MEM_RESERVE, prot);
         }
-
         bool ray_free(std::uintptr_t a)
         {
             if (!a || !connected())
                 return false;
             return VirtualFreeEx(g_proc->raw(), (LPVOID)a, 0, MEM_RELEASE) != 0;
         }
-
         std::uintptr_t ray_module(const wchar_t* name)
         {
             if (!connected() || !name)
@@ -121,14 +109,12 @@ namespace thenwefuckin::aim::raycast
             CloseHandle(snap);
             return out;
         }
-
         bool w_mem(std::uintptr_t a, const void* d, std::size_t s)
         {
             if (!ok_addr(a) || !d || !s || !connected())
                 return false;
             return g_proc->write_buf(a, d, s);
         }
-
         std::size_t pg()
         {
             static const std::size_t p = []
@@ -139,7 +125,6 @@ namespace thenwefuckin::aim::raycast
             }();
             return p;
         }
-
         DWORD query_protect(std::uintptr_t a)
         {
             MEMORY_BASIC_INFORMATION mbi{};
@@ -147,13 +132,11 @@ namespace thenwefuckin::aim::raycast
                 return 0;
             return mbi.Protect;
         }
-
         bool is_executable_protect(DWORD p)
         {
             const DWORD x = p & 0xFF;
             return x == PAGE_EXECUTE || x == PAGE_EXECUTE_READ || x == PAGE_EXECUTE_READWRITE || x == PAGE_EXECUTE_WRITECOPY;
         }
-
         bool protect_remote(std::uintptr_t address, std::size_t size, DWORD protection, DWORD* old_protect = nullptr)
         {
             if (!ok_addr(address) || !size || !connected())
@@ -201,7 +184,6 @@ namespace thenwefuckin::aim::raycast
                 return true;
             return false;
         }
-
         bool write_protected(std::uintptr_t address, const void* data, std::size_t size)
         {
             if (!ok_addr(address) || !data || !size)
@@ -213,7 +195,6 @@ namespace thenwefuckin::aim::raycast
                 protect_remote(address, size, old, nullptr);
             return wrote;
         }
-
         bool mark_cfg(std::uintptr_t t)
         {
             auto resolve = []() -> FARPROC
@@ -247,20 +228,17 @@ namespace thenwefuckin::aim::raycast
                 reinterpret_cast<void*>(t & ~(static_cast<std::uintptr_t>(pg()) - 1)), pg(), 1, &info);
             return ok != 0;
         }
-
         void append_u64(std::vector<std::uint8_t>& c, std::uint64_t v)
         {
             const auto* b = reinterpret_cast<const std::uint8_t*>(&v);
             c.insert(c.end(), b, b + 8);
         }
-
         void patch_rel32(std::vector<std::uint8_t>& c, std::size_t o, std::size_t t)
         {
             const std::int32_t v =
                 static_cast<std::int32_t>(static_cast<std::ptrdiff_t>(t) - static_cast<std::ptrdiff_t>(o + 4));
             std::memcpy(c.data() + o, &v, 4);
         }
-
         std::vector<std::uint8_t> make_hook_thunk(std::uintptr_t state, std::uintptr_t orig)
         {
             std::vector<std::uint8_t> c;
@@ -380,7 +358,6 @@ namespace thenwefuckin::aim::raycast
             c.push_back(0xC3);
             return c;
         }
-
         bool region_is_padding(std::uintptr_t a, std::size_t n)
         {
             std::vector<std::uint8_t> buf(n);
@@ -393,14 +370,12 @@ namespace thenwefuckin::aim::raycast
             }
             return true;
         }
-
         bool read_val(std::uintptr_t a, void* d, std::size_t s)
         {
             if (!connected())
                 return false;
             return g_proc->read_buf(a, d, s);
         }
-
         std::uintptr_t find_cave_in_module(std::uintptr_t module_base, std::size_t need, std::uintptr_t min_offset,
             std::uintptr_t ignore)
         {
@@ -464,7 +439,6 @@ namespace thenwefuckin::aim::raycast
             }
             return 0;
         }
-
         std::uintptr_t find_exec_cave(std::size_t need, std::uintptr_t, std::uintptr_t ignore = 0)
         {
             static const wchar_t* k_pref[] = {
@@ -529,7 +503,6 @@ namespace thenwefuckin::aim::raycast
                 return fallback_rwx;
             return 0;
         }
-
         std::uintptr_t alloc_exec_page()
         {
             const std::uintptr_t p = ray_alloc(pg(), PAGE_EXECUTE_READWRITE);
@@ -543,7 +516,6 @@ namespace thenwefuckin::aim::raycast
             }
             return p;
         }
-
         bool install_hook()
         {
             if (g_hook.installed)
@@ -658,7 +630,6 @@ namespace thenwefuckin::aim::raycast
             set_status("installed: hook live, waiting for target");
             return true;
         }
-
         void remove_hook()
         {
             if (g_hook.installed)
@@ -680,7 +651,6 @@ namespace thenwefuckin::aim::raycast
             g_hook = {};
             g_wallbang = false;
         }
-
         void ensure_hook(bool want)
         {
             using Clock = std::chrono::steady_clock;
@@ -711,7 +681,6 @@ namespace thenwefuckin::aim::raycast
             if (!g_hook.installed)
                 install_hook();
         }
-
         void set_hook_active(bool on, const math::vec3& world_target, bool wallbang)
         {
             if (!on)
@@ -744,90 +713,112 @@ namespace thenwefuckin::aim::raycast
             g_wallbang = wallbang;
             set_status(wallbang ? "aiming: magic bullet (wallbang)" : "aiming: redirect active");
         }
-
         struct CachedTarget
         {
             uintptr_t playerAddr = 0;
             uintptr_t characterAddr = 0;
             uintptr_t humanoidAddr = 0;
             uintptr_t targetPrim = 0;
+            uintptr_t teamAddr = 0;
             int partIdx = -1;
+            bool isBot = false;
+            float botHp = 100.0f;
         };
-
         std::vector<CachedTarget> s_targets;
         std::chrono::steady_clock::time_point s_lastResolve{};
         std::chrono::steady_clock::time_point s_lastScan{};
-
         void resolve_targets()
         {
             s_targets.clear();
             int wantPart = settings::aim_part;
-            auto list = g_ctx.player_list();
-            s_targets.reserve(list.size());
-            for (auto& entry : list)
+            std::vector<pcache::Entry> snap;
             {
-                if (entry.addr == g_ctx.local_player.addr)
+                std::lock_guard<std::mutex> lk(pcache::mtx);
+                snap = pcache::entries;
+            }
+            s_targets.reserve(snap.size());
+            std::uintptr_t localAddr = g_ctx.local_player.addr;
+            for (auto& e : snap)
+            {
+                if (!e.valid || e.player == localAddr)
                     continue;
-                node character = g_ctx.get_character(entry);
-                if (!character)
+                if (!e.humanoid)
                     continue;
-                uintptr_t charAddr = character.addr;
-                node humanoid = find_live_humanoid(character);
-                if (!humanoid)
-                    continue;
-                node targetPart = resolve_part(character, wantPart);
-                if (!targetPart)
-                    targetPart = character.find_child("Head");
-                if (!targetPart)
-                    continue;
-                uintptr_t prim = targetPart.primitive();
+                std::uintptr_t prim = pcache::aim_prim(e.lc, wantPart);
                 if (!prim)
                     continue;
                 CachedTarget t{};
-                t.playerAddr = entry.addr;
-                t.characterAddr = charAddr;
-                t.humanoidAddr = humanoid.addr;
+                t.playerAddr = e.player;
+                t.characterAddr = e.model;
+                t.humanoidAddr = e.humanoid;
                 t.targetPrim = prim;
+                t.teamAddr = e.team;
                 t.partIdx = wantPart;
                 s_targets.push_back(t);
             }
+            if (settings::aim_bots)
+            {
+                std::vector<BotAimTarget> bots;
+                collect_bot_targets(bots);
+                for (auto& b : bots)
+                {
+                    std::uintptr_t prim = (wantPart == 0) ? b.headPrim : b.rootPrim;
+                    if (!prim)
+                        prim = b.headPrim ? b.headPrim : b.rootPrim;
+                    if (!prim)
+                        continue;
+                    CachedTarget t{};
+                    t.playerAddr = b.inst;
+                    t.characterAddr = b.inst;
+                    t.humanoidAddr = b.humanoid;
+                    t.targetPrim = prim;
+                    t.teamAddr = 0;
+                    t.partIdx = wantPart;
+                    t.isBot = true;
+                    t.botHp = b.hp;
+                    s_targets.push_back(t);
+                }
+            }
         }
     }
-
     bool ready()
     {
         return g_hook.installed;
     }
-
     bool is_active()
     {
         return g_hook.active;
     }
-
     std::uint64_t calls()
     {
         if (!g_hook.installed || !g_hook.state || !connected())
             return 0;
         return g_proc->read<std::uint64_t>(g_hook.state + offsetof(RaycastState, calls));
     }
-
     const char* status()
     {
         return g_status;
     }
-
     void idle()
     {
         ensure_hook(false);
         s_targets.clear();
     }
-
+    void on_game_joined()
+    {
+        g_hook = {};
+        g_wallbang = false;
+        g_lastFail = std::chrono::steady_clock::time_point{};
+        s_targets.clear();
+        s_lastResolve = std::chrono::steady_clock::time_point{};
+        s_lastScan = std::chrono::steady_clock::time_point{};
+        set_status("idle: hook not requested");
+    }
     void shutdown()
     {
         ensure_hook(false);
         s_targets.clear();
     }
-
     void run(int w, int h)
     {
         if (!connected() || !g_ctx.ready || !g_ctx.camera || w <= 0 || h <= 0)
@@ -836,12 +827,10 @@ namespace thenwefuckin::aim::raycast
             thenwefuckin::aim::clear_debug_target();
             return;
         }
-
         auto now = std::chrono::steady_clock::now();
-        if (now - s_lastScan < std::chrono::milliseconds(4))
+        if (now - s_lastScan < std::chrono::milliseconds(8))
             return;
         s_lastScan = now;
-
         if (pftarget::active())
         {
             pftarget::PfBest b{};
@@ -861,7 +850,6 @@ namespace thenwefuckin::aim::raycast
             set_hook_active(true, b.world, true);
             return;
         }
-
         int wantPart = settings::aim_part;
         if (s_targets.empty()
             || now - s_lastResolve >= std::chrono::milliseconds(200)
@@ -876,45 +864,63 @@ namespace thenwefuckin::aim::raycast
                 return;
             }
         }
-
         float cx = static_cast<float>(w) * 0.5f;
         float cy = static_cast<float>(h) * 0.5f;
         const math::view_matrix& view = g_ctx.view;
-
         math::vec3 camPos = g_proc->read<math::vec3>(g_ctx.camera.addr + Offsets::Camera::Position);
         if (camPos.x == 0.0f && camPos.y == 0.0f && camPos.z == 0.0f)
             return;
-
         math::vec3 best{};
         bool found = false;
-        float bestDist = settings::aim_fov;
+        const bool wide = settings::aim_360;
+        float bestDist = wide ? 1e9f : settings::aim_fov;
         uintptr_t bestPlayer = 0;
-
+        const uintptr_t localTeam = thenwefuckin::aim::local_team_addr();
         for (auto& t : s_targets)
         {
-            uintptr_t charAddr = g_proc->read<uintptr_t>(t.playerAddr + Offsets::Player::ModelInstance);
-            if (charAddr != t.characterAddr)
+            if (thenwefuckin::aim::should_skip_teammate(localTeam, t.teamAddr))
+                continue;
+            if (t.isBot)
             {
-                tracking::clear(t.playerAddr);
-                continue;
+                std::uintptr_t par = g_proc->read<std::uintptr_t>(t.characterAddr + Offsets::Instance::Parent);
+                if (!par)
+                    continue;
+                float bhp = t.humanoidAddr ? g_proc->read<float>(t.humanoidAddr + Offsets::Humanoid::Health) : t.botHp;
+                if (!health::check(bhp))
+                    continue;
             }
-            float hp = g_proc->read<float>(t.humanoidAddr + Offsets::Humanoid::Health);
-            if (!health::check(hp))
-                continue;
+            else
+            {
+                uintptr_t charAddr = g_proc->read<uintptr_t>(t.playerAddr + Offsets::Player::ModelInstance);
+                if (charAddr != t.characterAddr)
+                {
+                    tracking::clear(t.playerAddr);
+                    continue;
+                }
+                float hp = g_proc->read<float>(t.humanoidAddr + Offsets::Humanoid::Health);
+                if (!health::check(hp))
+                    continue;
+            }
             math::vec3 pos = g_proc->read<math::vec3>(t.targetPrim + Offsets::Primitive::Position);
             if (pos.x == 0.0f && pos.y == 0.0f && pos.z == 0.0f)
                 continue;
-
             tracking::push(t.playerAddr, pos.x, pos.y, pos.z);
-
             if (!distance::check(pos, camPos))
                 continue;
-            math::vec2 s{};
-            if (!projection::to_screen(pos, view, static_cast<float>(w), static_cast<float>(h), s))
-                continue;
-            float dx = s.x - cx;
-            float dy = s.y - cy;
-            float d = sqrtf(dx * dx + dy * dy);
+            float d = 0.0f;
+            if (wide)
+            {
+                d = (pos - camPos).length();
+            }
+            else
+            {
+                math::vec2 s{};
+                if (!projection::to_screen(pos, view, static_cast<float>(w), static_cast<float>(h), s))
+                    continue;
+                float dx = s.x - cx;
+                float dy = s.y - cy;
+                d = sqrtf(dx * dx + dy * dy);
+            }
             if (d < bestDist)
             {
                 bestDist = d;
@@ -923,14 +929,12 @@ namespace thenwefuckin::aim::raycast
                 found = true;
             }
         }
-
         if (!found)
         {
             set_hook_active(false, math::vec3{}, false);
             thenwefuckin::aim::clear_debug_target();
             return;
         }
-
         {
             float scanDt = 0.004f;
             float smoothLag = 0.0f;
@@ -941,7 +945,6 @@ namespace thenwefuckin::aim::raycast
                 smoothLag = (sx - 1.0f) * scanDt;
             }
             float leadT = scanDt + smoothLag;
-
             tracking::Velocity tv{};
             if (bestPlayer && tracking::sample(bestPlayer, tv))
             {
@@ -953,15 +956,12 @@ namespace thenwefuckin::aim::raycast
                 best.z += (tv.vz - lv.z) * leadT * damp * airDampY;
             }
         }
-
         thenwefuckin::aim::set_debug_target(best, bestPlayer);
-
         if (!settings::aim_magicbullet)
         {
             set_hook_active(false, math::vec3{}, false);
             return;
         }
-
         ensure_hook(true);
         set_hook_active(true, best, true);
     }

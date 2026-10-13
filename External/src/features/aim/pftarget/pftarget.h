@@ -1,7 +1,6 @@
 #pragma once
 #include "../../../utility/cache/math.h"
 #include <cstdint>
-
 namespace thenwefuckin::aim::pftarget
 {
     struct PfBest
@@ -11,8 +10,6 @@ namespace thenwefuckin::aim::pftarget
         float dist2d = 0.0f;
         uintptr_t model = 0;
     };
-
     bool active();
-
     bool select_best(int w, int h, PfBest& out);
 }

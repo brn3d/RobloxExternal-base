@@ -1,7 +1,6 @@
 #pragma once
 #include <Windows.h>
 #include <cstdint>
-
 extern "C" long Rax_ReadVirtualMemory(void* processHandle, const void* baseAddress,
     void* buffer, unsigned long long numberOfBytesToRead, unsigned long long* numberOfBytesRead);
 extern "C" long Rax_WriteVirtualMemory(void* processHandle, void* baseAddress,
@@ -11,11 +10,9 @@ extern "C" void* Rax_MemSet(void* dst, unsigned char value, unsigned long long s
 #ifdef _M_X64
 extern "C" void Rax_SetSsns(unsigned long readSsn, unsigned long writeSsn);
 #endif
-
 namespace thenwefuckin::syscalls
 {
 #ifdef _M_X64
-
     inline unsigned long ntdll_ssn(const char* name)
     {
         HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
@@ -28,13 +25,11 @@ namespace thenwefuckin::syscalls
         if (ssn == 0 || ssn > 0xFFFF) return 0;
         return ssn;
     }
-
     inline bool& ready_flag()
     {
         static bool v = false;
         return v;
     }
-
     inline void init()
     {
         static bool done = false;
@@ -48,7 +43,6 @@ namespace thenwefuckin::syscalls
             ready_flag() = true;
         }
     }
-
     inline bool ready()
     {
         return ready_flag();

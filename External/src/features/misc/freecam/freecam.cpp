@@ -4,13 +4,13 @@
 #include "../../../menu/overlay/settings.h"
 #include "../../../menu/core/gui/menu.h"
 #include "../fov/fov.h"
+#include "../zoom/zoom.h"
 #include <Windows.h>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <thread>
-
 namespace thenwefuckin::misc::freecam
 {
     namespace
@@ -35,15 +35,12 @@ namespace thenwefuckin::misc::freecam
         bool s_haveSavedCam = false;
         uintptr_t s_hrpPrim = 0;
         bool s_hrpWasAnchored = false;
-
         uintptr_t s_camAddr = 0;
         uintptr_t s_camPrim = 0;
         bool s_camIsPart = false;
         bool s_savedIsPart = false;
         std::chrono::steady_clock::time_point s_lastCamResolve{};
-
         static constexpr int kCamTypeScriptable = 6;
-
         void set_hrp_anchored(uintptr_t prim, bool anchored)
         {
             if (!prim || !g_proc || !g_proc->connected())
@@ -57,7 +54,6 @@ namespace thenwefuckin::misc::freecam
                 : static_cast<uint8_t>(flags & ~Offsets::PrimitiveFlags::Anchored);
             g_proc->write<uint8_t>(prim + Offsets::Primitive::PrimitiveFlags, next);
         }
-
         void zero_hrp_velocity(uintptr_t prim)
         {
             if (!prim || !g_proc || !g_proc->connected())
@@ -65,7 +61,6 @@ namespace thenwefuckin::misc::freecam
             math::vec3 zero{};
             g_proc->write<math::vec3>(prim + Offsets::Primitive::AssemblyLinearVelocity, zero);
         }
-
         uintptr_t resolve_hrp_prim()
         {
             node root = g_ctx.local_root;
@@ -73,7 +68,6 @@ namespace thenwefuckin::misc::freecam
                 return 0;
             return root.primitive();
         }
-
         bool roblox_foreground()
         {
             if (!g_proc || !g_proc->connected())
@@ -85,7 +79,6 @@ namespace thenwefuckin::misc::freecam
             GetWindowThreadProcessId(fg, &pid);
             return pid != 0 && pid == g_proc->pid();
         }
-
         void read_yaw_pitch(float& yaw, float& pitch)
         {
             math::frame cf{};
@@ -103,7 +96,6 @@ namespace thenwefuckin::misc::freecam
             pitch = asinf(std::clamp(fwd.y, -1.0f, 1.0f));
             yaw = atan2f(fwd.x, -fwd.z);
         }
-
         math::vec3 read_cam_pos()
         {
             if (s_camIsPart && s_camPrim)
@@ -112,7 +104,6 @@ namespace thenwefuckin::misc::freecam
                 return g_proc->read<math::vec3>(g_ctx.camera.addr + Offsets::Camera::Position);
             return {};
         }
-
         void write_cam_rot(const float blob12[12])
         {
             if (s_camIsPart && s_camPrim)
@@ -120,7 +111,6 @@ namespace thenwefuckin::misc::freecam
             else if (g_ctx.camera)
                 g_proc->write_buf(g_ctx.camera.addr + Offsets::Camera::Rotation, blob12, sizeof(float) * 12);
         }
-
         bool resolve_cam_target(bool force)
         {
             auto now = std::chrono::steady_clock::now();
@@ -166,9 +156,7 @@ namespace thenwefuckin::misc::freecam
             return true;
         }
     }
-
     void tick(bool want);
-
     void run()
     {
         bool want = settings::freecam_enabled;
@@ -178,7 +166,6 @@ namespace thenwefuckin::misc::freecam
         }
         tick(want);
     }
-
     bool worker_key_down(int key)
     {
         if (key <= 0) return false;
@@ -186,7 +173,6 @@ namespace thenwefuckin::misc::freecam
         if (vk != 0) return (GetAsyncKeyState(vk) & 0x8000) != 0;
         return false;
     }
-
     bool worker_want_active()
     {
         if (!settings::freecam_enabled)
@@ -205,7 +191,6 @@ namespace thenwefuckin::misc::freecam
         s_keyPrev = down;
         return s_keyToggled;
     }
-
     void thread_main(std::atomic<bool>& stop)
     {
         HANDLE self = GetCurrentThread();
@@ -214,7 +199,8 @@ namespace thenwefuckin::misc::freecam
         {
             bool want = worker_want_active();
             bool fovWant = fov::worker_want_active();
-            if (!want && !s_active && !fovWant && !fov::is_active())
+            bool zoomWant = zoom::worker_want_active();
+            if (!want && !s_active && !fovWant && !fov::is_active() && !zoomWant && !zoom::is_active())
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 continue;
@@ -224,25 +210,22 @@ namespace thenwefuckin::misc::freecam
                 tick(want);
             }
             fov::tick_fast(fovWant);
+            zoom::tick_fast(zoomWant);
         }
-
         fov::tick_fast(false);
+        zoom::tick_fast(false);
         SetThreadPriority(self, THREAD_PRIORITY_NORMAL);
     }
-
     void tick(bool want)
     {
-
         if (!want && !s_active)
             return;
-
         if (!g_proc || !g_proc->connected())
         {
             s_active = false;
             s_speedLocked = false;
             return;
         }
-
         if (!want)
         {
             if (s_speedLocked)
@@ -275,12 +258,9 @@ namespace thenwefuckin::misc::freecam
             s_camIsPart = false;
             return;
         }
-
         if (!g_ctx.ready || !g_ctx.camera)
             return;
-
         auto now = std::chrono::steady_clock::now();
-
         if (!s_active)
         {
             if (!resolve_cam_target(true))
@@ -320,15 +300,12 @@ namespace thenwefuckin::misc::freecam
             s_lastTick = now;
             s_active = true;
         }
-
         float dt = std::chrono::duration<float>(now - s_lastTick).count();
         s_lastTick = now;
         if (dt > 0.05f) dt = 0.05f;
         if (dt <= 0.0f) dt = 0.000001f;
         ++s_tickCount;
-
         resolve_cam_target(false);
-
         if (!s_camIsPart)
         {
             if (Offsets::Camera::CameraType)
@@ -359,9 +336,7 @@ namespace thenwefuckin::misc::freecam
                 zero_hrp_velocity(s_hrpPrim);
             }
         }
-
         bool canInput = roblox_foreground() && !g_menuOpen;
-
         if (canInput)
         {
             long rdx = 0, rdy = 0;
@@ -373,7 +348,6 @@ namespace thenwefuckin::misc::freecam
                 s_pitch -= static_cast<float>(rdy) * sens;
                 s_pitch = std::clamp(s_pitch, -1.5f, 1.5f);
             }
-
             float fwdIn = 0.0f, sideIn = 0.0f, upIn = 0.0f;
             if (GetAsyncKeyState('W') & 0x8000) fwdIn += 1.0f;
             if (GetAsyncKeyState('S') & 0x8000) fwdIn -= 1.0f;
@@ -381,14 +355,12 @@ namespace thenwefuckin::misc::freecam
             if (GetAsyncKeyState('A') & 0x8000) sideIn -= 1.0f;
             if (GetAsyncKeyState(VK_SPACE) & 0x8000) upIn += 1.0f;
             if ((GetAsyncKeyState(VK_LCONTROL) & 0x8000) || (GetAsyncKeyState(VK_RCONTROL) & 0x8000)) upIn -= 1.0f;
-
             if (fwdIn != 0.0f || sideIn != 0.0f || upIn != 0.0f)
             {
                 float cp = cosf(s_pitch);
                 math::vec3 forward{ sinf(s_yaw) * cp, sinf(s_pitch), -cosf(s_yaw) * cp };
                 math::vec3 right{ cosf(s_yaw), 0.0f, sinf(s_yaw) };
                 math::vec3 up{ 0.0f, 1.0f, 0.0f };
-
                 math::vec3 move = forward * fwdIn + right * sideIn + up * upIn;
                 float len = move.length();
                 if (len > 0.000001f)
@@ -399,7 +371,6 @@ namespace thenwefuckin::misc::freecam
                 }
             }
         }
-
         {
             float cp = cosf(s_pitch);
             math::vec3 look{

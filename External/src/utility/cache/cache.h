@@ -9,13 +9,11 @@
 #include <string>
 #include <vector>
 #include <memory>
-
 #include "math.h"
 #include "../struct/offsets.h"
 #include "../struct/structs.h"
 #include "../struct/world2screen.h"
 #include "../memory/syscall.h"
-
 namespace thenwefuckin
 {
     class process
@@ -23,29 +21,24 @@ namespace thenwefuckin
     public:
         process() = default;
         ~process() { detach(); }
-
         process(const process&) = delete;
         process& operator=(const process&) = delete;
-
         bool attach(const std::string& exe_name)
         {
             uint32_t pid = find_pid(exe_name);
             if (!pid)
                 return false;
-
             HANDLE h = OpenProcess(
                 PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION | PROCESS_QUERY_INFORMATION,
                 FALSE, pid);
             if (!h || h == INVALID_HANDLE_VALUE)
                 return false;
-
             detach();
             handle = h;
             pid_ = pid;
             base_ = find_module(exe_name);
             return base_ != 0;
         }
-
         void detach()
         {
             if (handle && handle != INVALID_HANDLE_VALUE)
@@ -54,7 +47,6 @@ namespace thenwefuckin
             pid_ = 0;
             base_ = 0;
         }
-
         bool connected() const { return handle && handle != INVALID_HANDLE_VALUE; }
         bool alive() const
         {
@@ -68,7 +60,6 @@ namespace thenwefuckin
         uint64_t base() const { return base_; }
         uint32_t pid() const { return pid_; }
         HANDLE raw() const { return handle; }
-
         template <typename T>
         T read(uint64_t addr) const
         {
@@ -88,7 +79,6 @@ namespace thenwefuckin
             ReadProcessMemory(handle, reinterpret_cast<LPCVOID>(addr), &v, sizeof(T), nullptr);
             return v;
         }
-
         template <typename T>
         void write(uint64_t addr, const T& v) const
         {
@@ -104,7 +94,6 @@ namespace thenwefuckin
 #endif
             WriteProcessMemory(handle, reinterpret_cast<LPVOID>(addr), &v, sizeof(T), nullptr);
         }
-
         bool read_buf(uint64_t addr, void* dst, size_t size) const
         {
             if (!connected() || !dst || !size)
@@ -120,7 +109,6 @@ namespace thenwefuckin
             SIZE_T done = 0;
             return ReadProcessMemory(handle, reinterpret_cast<LPCVOID>(addr), dst, size, &done) && done == size;
         }
-
         bool write_buf(uint64_t addr, const void* src, size_t size) const
         {
             if (!connected() || !src || !size)
@@ -136,7 +124,6 @@ namespace thenwefuckin
             SIZE_T done = 0;
             return WriteProcessMemory(handle, reinterpret_cast<LPVOID>(addr), src, size, &done) && done == size;
         }
-
         std::string read_game_string(uint64_t addr) const
         {
             if (!addr || !connected())
@@ -152,7 +139,6 @@ namespace thenwefuckin
                 return {};
             return std::string(buf.data(), static_cast<size_t>(len));
         }
-
         void write_game_string(uint64_t addr, const std::string& value) const
         {
             if (!addr || !connected())
@@ -180,18 +166,15 @@ namespace thenwefuckin
             write<char>(dst + len, '\0');
             write<uint64_t>(addr + 0x10, len);
         }
-
     private:
         uint32_t find_pid(const std::string& exe_name)
         {
             HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
             if (snap == INVALID_HANDLE_VALUE)
                 return 0;
-
             PROCESSENTRY32 entry{};
             entry.dwSize = sizeof(entry);
             uint32_t found = 0;
-
             if (Process32First(snap, &entry))
             {
                 do
@@ -208,7 +191,6 @@ namespace thenwefuckin
             CloseHandle(snap);
             return found;
         }
-
         uint64_t find_module(const std::string& exe_name)
         {
             if (!connected())
@@ -216,11 +198,9 @@ namespace thenwefuckin
             HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid_);
             if (snap == INVALID_HANDLE_VALUE)
                 return 0;
-
             MODULEENTRY32 entry{};
             entry.dwSize = sizeof(entry);
             uint64_t found = 0;
-
             if (Module32First(snap, &entry))
             {
                 do
@@ -237,23 +217,18 @@ namespace thenwefuckin
             CloseHandle(snap);
             return found;
         }
-
         HANDLE handle = nullptr;
         uint32_t pid_ = 0;
         uint64_t base_ = 0;
     };
-
     inline std::shared_ptr<process> g_proc = std::make_shared<process>();
-
     class node
     {
     public:
         uintptr_t addr = 0;
-
         node() = default;
         explicit node(uintptr_t a) : addr(a) {}
         explicit operator bool() const { return addr != 0; }
-
         std::string name() const
         {
             if (!addr)
@@ -263,7 +238,6 @@ namespace thenwefuckin
                 return {};
             return g_proc->read_game_string(container + Offsets::Instance::Name);
         }
-
         std::string class_name() const
         {
             if (!addr)
@@ -274,27 +248,22 @@ namespace thenwefuckin
             uintptr_t ptr = g_proc->read<uintptr_t>(desc + Offsets::Instance::ClassName);
             return ptr ? g_proc->read_game_string(ptr) : std::string{};
         }
-
         node parent() const
         {
             return addr ? node(g_proc->read<uintptr_t>(addr + Offsets::Instance::Parent)) : node{};
         }
-
         std::vector<node> children() const
         {
             std::vector<node> out;
             if (!addr)
                 return out;
-
             uintptr_t list = g_proc->read<uintptr_t>(addr + Offsets::Instance::ChildrenStart);
             if (!list)
                 return out;
-
             uintptr_t end = g_proc->read<uintptr_t>(list + Offsets::Instance::ChildrenEnd);
             uintptr_t cur = g_proc->read<uintptr_t>(list);
             if (!cur || !end || end < cur)
                 return out;
-
             size_t count = (size_t)(end - cur) / 0x10;
             if (count > 2048)
                 count = 2048;
@@ -306,7 +275,6 @@ namespace thenwefuckin
             std::vector<uint8_t> buf(bytes);
             if (!g_proc->read_buf(cur, buf.data(), bytes))
                 return out;
-
             out.reserve(count < 32 ? count : 32);
             const uintptr_t* w = (const uintptr_t*)buf.data();
             for (size_t n = 0; n < count * 2; n += 2)
@@ -316,7 +284,6 @@ namespace thenwefuckin
             }
             return out;
         }
-
         node find_child(const std::string& wanted) const
         {
             for (auto& c : children())
@@ -326,7 +293,6 @@ namespace thenwefuckin
             }
             return {};
         }
-
         node find_child_of_class(const std::string& cls) const
         {
             for (auto& c : children())
@@ -336,36 +302,30 @@ namespace thenwefuckin
             }
             return {};
         }
-
         uintptr_t primitive() const
         {
             return addr ? g_proc->read<uintptr_t>(addr + Offsets::BasePart::Primitive) : 0;
         }
-
         math::vec3 position() const
         {
             uintptr_t prim = primitive();
             return prim ? g_proc->read<math::vec3>(prim + Offsets::Primitive::Position) : math::vec3{};
         }
-
         math::vec3 velocity() const
         {
             uintptr_t prim = primitive();
             return prim ? g_proc->read<math::vec3>(prim + Offsets::Primitive::AssemblyLinearVelocity) : math::vec3{};
         }
-
         math::frame cframe() const
         {
             uintptr_t prim = primitive();
             return prim ? g_proc->read<math::frame>(prim + Offsets::Primitive::Rotation) : math::frame{};
         }
-
         float distance_to(const math::vec3& p) const
         {
             return position().dist_to(p);
         }
     };
-
     inline node find_live_humanoid(const node& character, float* outHp = nullptr, float* outMaxHp = nullptr)
     {
         node fallback{};
@@ -405,7 +365,6 @@ namespace thenwefuckin
         if (outMaxHp) *outMaxHp = best ? bestMax : fallbackMax;
         return pick;
     }
-
     struct context
     {
         node datamodel;
@@ -414,26 +373,21 @@ namespace thenwefuckin
         node local_player;
         node camera;
         node local_root;
-
         node local_humanoid;
         math::view_matrix view{};
         math::vec3 local_pos{};
         math::vec3 local_velocity{};
         bool ready = false;
-
         math::vec3 m_lastPos{};
         std::chrono::steady_clock::time_point m_lastSample{};
         bool m_haveSample = false;
-
         node m_cachedChar{};
         node m_cachedHum{};
         std::chrono::steady_clock::time_point m_lastCharCheck{};
-
         node get_character(const node& player_node) const
         {
             if (!player_node)
                 return node{};
-
             uintptr_t charAddr = g_proc->read<uintptr_t>(player_node.addr + Offsets::Player::ModelInstance);
             if (charAddr)
             {
@@ -441,15 +395,12 @@ namespace thenwefuckin
                 if (c.addr && (c.find_child_of_class("Humanoid") || c.find_child("Head") || c.find_child("HumanoidRootPart") || c.primitive()))
                     return c;
             }
-
             std::string name = player_node.name();
             if (name.empty() || !workspace)
                 return node{};
-
             node direct = workspace.find_child(name);
             if (direct && (direct.find_child_of_class("Humanoid") || direct.find_child("Head") || direct.find_child("HumanoidRootPart")))
                 return direct;
-
             static const char* const kFolderNames[] = {
                 "PLAYERS", "Players", "Characters", "characters",
                 "Entities", "entities", "Actors", "actors", "Units"
@@ -464,22 +415,18 @@ namespace thenwefuckin
                         return inside;
                 }
             }
-
             return node{};
         }
-
         bool resolve_services(uint64_t dmAddr)
         {
             datamodel = node(dmAddr);
             if (!datamodel)
                 return false;
-
             workspace = node(g_proc->read<uintptr_t>(datamodel.addr + Offsets::DataModel::Workspace));
             if (!workspace)
                 workspace = datamodel.find_child_of_class("Workspace");
             if (!workspace)
                 workspace = datamodel.find_child("Workspace");
-
             players = datamodel.find_child_of_class("Players");
             if (!players)
                 players = datamodel.find_child("Players");
@@ -487,7 +434,6 @@ namespace thenwefuckin
                 players = datamodel.find_child("PlayerService");
             if (!players)
                 return false;
-
             local_player = node(g_proc->read<uintptr_t>(players.addr + Offsets::Players::LocalPlayer));
             if (!local_player)
             {
@@ -500,10 +446,8 @@ namespace thenwefuckin
                     }
                 }
             }
-
             uintptr_t curCam = workspace ? g_proc->read<uintptr_t>(workspace.addr + Offsets::Workspace::CurrentCamera) : 0;
             camera = curCam ? node{ curCam } : (workspace ? workspace.find_child_of_class("Camera") : node{});
-
             local_root = node{};
             local_humanoid = node{};
             m_cachedChar = node{};
@@ -522,11 +466,9 @@ namespace thenwefuckin
                     m_cachedHum = local_humanoid;
                 }
             }
-
             m_cachedDm = dmAddr;
             return true;
         }
-
         bool refresh()
         {
             local_velocity = math::vec3{};
@@ -539,7 +481,6 @@ namespace thenwefuckin
                 m_cachedHum = node{};
                 return false;
             }
-
             uint64_t fake = g_proc->read<uint64_t>(g_proc->base() + Offsets::FakeDataModel::Pointer);
             if (!fake)
             {
@@ -550,12 +491,10 @@ namespace thenwefuckin
                 return false;
             }
             uint64_t dmAddr = g_proc->read<uintptr_t>(fake + Offsets::FakeDataModel::RealDataModel);
-
             auto now = std::chrono::steady_clock::now();
             bool cacheValid = (dmAddr != 0 && dmAddr == m_cachedDm && datamodel && players);
             bool cacheStale = cacheValid &&
                 std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastResolve).count() >= 250;
-
             if (!cacheValid || cacheStale)
             {
                 m_lastResolve = now;
@@ -568,11 +507,9 @@ namespace thenwefuckin
                     return false;
                 }
             }
-
             uint64_t visual = g_proc->read<uint64_t>(g_proc->base() + Offsets::VisualEngine::Pointer);
             if (visual)
                 view = g_proc->read<math::view_matrix>(visual + Offsets::VisualEngine::ViewMatrix);
-
             if (workspace)
             {
                 uintptr_t curCam = g_proc->read<uintptr_t>(workspace.addr + Offsets::Workspace::CurrentCamera);
@@ -581,7 +518,6 @@ namespace thenwefuckin
                 else if (!camera)
                     camera = workspace.find_child_of_class("Camera");
             }
-
             if (local_player)
             {
                 uintptr_t mi = g_proc->read<uintptr_t>(local_player.addr + Offsets::Player::ModelInstance);
@@ -619,17 +555,14 @@ namespace thenwefuckin
                     m_cachedHum = local_humanoid;
                 }
             }
-
             if (local_root)
             {
                 local_pos = local_root.position();
                 local_velocity = sample_velocity(local_root);
             }
-
             ready = (workspace && players && local_player);
             return ready;
         }
-
         node resolve_local_humanoid() const
         {
             if (!g_proc || !g_proc->connected() || !local_player)
@@ -639,7 +572,6 @@ namespace thenwefuckin
                 return {};
             return find_live_humanoid(character);
         }
-
         node resolve_camera() const
         {
             if (!g_proc || !g_proc->connected())
@@ -652,19 +584,37 @@ namespace thenwefuckin
             }
             return camera;
         }
-
         uint64_t m_cachedDm = 0;
         std::chrono::steady_clock::time_point m_lastResolve{};
-
+        void reset()
+        {
+            datamodel = node{};
+            workspace = node{};
+            players = node{};
+            local_player = node{};
+            camera = node{};
+            local_root = node{};
+            local_humanoid = node{};
+            view = math::view_matrix{};
+            local_pos = math::vec3{};
+            local_velocity = math::vec3{};
+            ready = false;
+            m_lastPos = math::vec3{};
+            m_lastSample = std::chrono::steady_clock::time_point{};
+            m_haveSample = false;
+            m_cachedChar = node{};
+            m_cachedHum = node{};
+            m_lastCharCheck = std::chrono::steady_clock::time_point{};
+            m_cachedDm = 0;
+            m_lastResolve = std::chrono::steady_clock::time_point{};
+        }
         math::vec3 sample_velocity(const node& root)
         {
             math::vec3 v = root.velocity();
-
             bool sane = std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z)
                         && v.length() < 5000.0f;
             if (sane)
                 return v;
-
             auto now = std::chrono::steady_clock::now();
             if (m_haveSample && now > m_lastSample)
             {
@@ -677,7 +627,6 @@ namespace thenwefuckin
             m_haveSample = true;
             return v;
         }
-
         std::vector<node> player_list() const
         {
             if (!players)
@@ -685,7 +634,6 @@ namespace thenwefuckin
             return players.children();
         }
     };
-
     inline context g_ctx;
 }
 #pragma endregion
@@ -698,32 +646,26 @@ namespace thenwefuckin
 #include <cstdlib>
 #include <algorithm>
 #include <chrono>
-
 namespace PfCache
 {
     inline constexpr std::uint64_t kPlaceId = 292439477ull;
-
     inline constexpr std::uintptr_t kTextLabelText = 0xBA0;
     inline constexpr std::uintptr_t kTextLabelTextColor3 = 0xEB8;
     inline constexpr std::uintptr_t kGuiObjectSize = 0x520;
-
     struct Color3
     {
         float r = 0.0f, g = 0.0f, b = 0.0f;
     };
-
     struct Udim
     {
         float scale = 0.0f;
         int offset = 0;
     };
-
     struct Udim2
     {
         Udim x{};
         Udim y{};
     };
-
     struct PfPlayer
     {
         std::uintptr_t modelAddr = 0;
@@ -741,13 +683,11 @@ namespace PfCache
         bool colorValid = false;
         bool isValid = false;
     };
-
     inline std::vector<PfPlayer> players;
     inline std::uintptr_t localCharacterAddr = 0;
     inline std::uintptr_t localTeamFolderAddr = 0;
     inline std::uintptr_t workspacePlayersAddr = 0;
     inline thenwefuckin::math::vec3 localPos{};
-
     struct PfDebug
     {
         std::uint64_t placeIdRead = 0;
@@ -776,7 +716,6 @@ namespace PfCache
     inline std::size_t wsScanPos = 0;
     inline std::uintptr_t wsScanWs = 0;
     inline bool wsScanDone = false;
-
     inline std::uint64_t ReadPlaceId()
     {
         if (!thenwefuckin::g_ctx.datamodel.addr)
@@ -784,12 +723,10 @@ namespace PfCache
         return thenwefuckin::g_proc->read<std::uint64_t>(
             thenwefuckin::g_ctx.datamodel.addr + Offsets::DataModel::PlaceId);
     }
-
     inline bool IsActivePlace()
     {
         return ReadPlaceId() == kPlaceId;
     }
-
     inline bool LooksLikePf(std::uintptr_t wsPlayers)
     {
         if (!wsPlayers || !thenwefuckin::g_proc)
@@ -818,7 +755,6 @@ namespace PfCache
         }
         return false;
     }
-
     inline std::uintptr_t FindWorkspacePlayersFolder(bool& done)
     {
         done = true;
@@ -866,14 +802,12 @@ namespace PfCache
         done = false;
         return 0;
     }
-
     inline std::string ReadLabelText(std::uintptr_t labelAddr)
     {
         if (!labelAddr || !thenwefuckin::g_proc)
             return {};
         return thenwefuckin::g_proc->read_game_string(labelAddr + kTextLabelText);
     }
-
     inline bool ReadLabelColor(std::uintptr_t labelAddr, Color3& out)
     {
         if (!labelAddr || !thenwefuckin::g_proc)
@@ -885,7 +819,6 @@ namespace PfCache
             return false;
         return true;
     }
-
     inline bool IsEnemyLabelColor(const Color3& c)
     {
         const int r = (int)(c.r * 255.0f + 0.5f);
@@ -893,7 +826,16 @@ namespace PfCache
         const int b = (int)(c.b * 255.0f + 0.5f);
         return std::abs(r - 255) <= 8 && std::abs(g - 10) <= 12 && std::abs(b - 20) <= 12;
     }
-
+    inline bool IsBotModelName(const std::string& n)
+    {
+        if (n == "MilitaryHitbox" || n == "ZombieHitbox" || n == "BTR")
+            return true;
+        if (n.find("Heli") != std::string::npos &&
+            n.find("Rocket") == std::string::npos &&
+            n.find("Crate") == std::string::npos)
+            return true;
+        return false;
+    }
     inline std::uintptr_t FindBillboardLabel(std::uintptr_t modelAddr)
     {
         thenwefuckin::node model{ modelAddr };
@@ -915,7 +857,6 @@ namespace PfCache
         }
         return 0;
     }
-
     inline std::string ReadModelName(std::uintptr_t modelAddr)
     {
         const auto label = FindBillboardLabel(modelAddr);
@@ -923,7 +864,6 @@ namespace PfCache
             return ReadLabelText(label);
         return {};
     }
-
     inline std::uintptr_t FindHealthPercent(std::uintptr_t modelAddr)
     {
         thenwefuckin::node model{ modelAddr };
@@ -955,7 +895,6 @@ namespace PfCache
         }
         return 0;
     }
-
     inline float ReadHealthFrac(std::uintptr_t percentAddr)
     {
         if (!percentAddr || !thenwefuckin::g_proc)
@@ -966,7 +905,6 @@ namespace PfCache
             return 1.0f;
         return f;
     }
-
     inline std::vector<std::uintptr_t> CollectLimbs(std::uintptr_t modelAddr, std::uintptr_t head, std::uintptr_t torso)
     {
         std::vector<std::uintptr_t> out;
@@ -982,7 +920,6 @@ namespace PfCache
         }
         return out;
     }
-
     inline void ResolveCharacter(std::uintptr_t modelAddr, std::uintptr_t& outHead, std::uintptr_t& outTorso)
     {
         outHead = 0;
@@ -1015,7 +952,6 @@ namespace PfCache
                 outTorso = part.addr;
         }
     }
-
     inline std::uintptr_t ResolveLocalCharacter(std::uintptr_t wsPlayers)
     {
         using namespace thenwefuckin;
@@ -1037,7 +973,6 @@ namespace PfCache
         }
         return 0;
     }
-
     inline int ScoreFolderEnemy(std::uintptr_t folderAddr)
     {
         int enemy = 0;
@@ -1058,7 +993,6 @@ namespace PfCache
         }
         return enemy - friendly;
     }
-
     inline bool IsTeammate(const PfPlayer& p)
     {
         if (p.colorValid)
@@ -1067,11 +1001,29 @@ namespace PfCache
             return p.teamFolderAddr == localTeamFolderAddr;
         return false;
     }
-
+        inline void on_game_joined()
+    {
+        players.clear();
+        localCharacterAddr = 0;
+        localTeamFolderAddr = 0;
+        workspacePlayersAddr = 0;
+        localPos = thenwefuckin::math::vec3{};
+        dbg = PfDebug{};
+        lastFull = std::chrono::steady_clock::time_point{};
+        verdictPlace = 0;
+        verdictDm = 0;
+        verdictTime = std::chrono::steady_clock::time_point{};
+        verdictPf = false;
+        cachedWsPlayers = 0;
+        cachedWsAddr = 0;
+        wsScanKids.clear();
+        wsScanPos = 0;
+        wsScanWs = 0;
+        wsScanDone = false;
+    }
     inline void RefreshFast()
     {
-        using namespace thenwefuckin;
-        if (g_ctx.camera.addr && g_proc)
+        using namespace thenwefuckin;        if (g_ctx.camera.addr && g_proc)
             localPos = g_proc->read<math::vec3>(g_ctx.camera.addr + Offsets::Camera::Position);
         int zeros = 0;
         for (auto& p : players)
@@ -1090,7 +1042,6 @@ namespace PfCache
             dbg.hpAllZeroFix = 1;
         }
     }
-
     inline void update()
     {
         using namespace thenwefuckin;
@@ -1112,13 +1063,11 @@ namespace PfCache
             return;
         }
         lastFull = now;
-
         players.clear();
         localCharacterAddr = 0;
         localTeamFolderAddr = 0;
         workspacePlayersAddr = 0;
         dbg = PfDebug{};
-
         dbg.placeIdRead = quickPlace ? quickPlace : ReadPlaceId();
         if (!g_ctx.workspace.addr)
         {
@@ -1129,7 +1078,6 @@ namespace PfCache
             verdictPf = false;
             return;
         }
-
         bool folderDone = false;
         const auto wsPlayers = FindWorkspacePlayersFolder(folderDone);
         if (!wsPlayers)
@@ -1147,7 +1095,6 @@ namespace PfCache
             return;
         }
         workspacePlayersAddr = wsPlayers;
-
         if (dbg.placeIdRead != kPlaceId && !LooksLikePf(wsPlayers))
         {
             dbg.failStage = "placeid mismatch + no pf structure";
@@ -1157,14 +1104,11 @@ namespace PfCache
             verdictPf = false;
             return;
         }
-
         std::string localName;
         if (g_ctx.local_player.addr)
             localName = g_ctx.local_player.name();
         localCharacterAddr = ResolveLocalCharacter(wsPlayers);
-
         dbg.wsChildren = (int)node{ wsPlayers }.children().size();
-
         std::uintptr_t folders[2]{};
         int nf = 0;
         node ws{ wsPlayers };
@@ -1196,7 +1140,6 @@ namespace PfCache
             if (grand.addr == wsPlayers)
                 localTeamFolderAddr = parent.addr;
         }
-
         for (auto& folder : ws.children())
         {
             if (folder.class_name() != "Folder")
@@ -1209,6 +1152,8 @@ namespace PfCache
                 if (model.addr == localCharacterAddr)
                     continue;
 
+                if (IsBotModelName(model.name()))
+                    continue;
                 std::uintptr_t head = 0, torso = 0;
                 ResolveCharacter(model.addr, head, torso);
                 if (!head && !torso)
@@ -1216,7 +1161,6 @@ namespace PfCache
                     dbg.modelsNoHeadTorso++;
                     continue;
                 }
-
                 const auto label = FindBillboardLabel(model.addr);
                 Color3 col{};
                 const bool colOk = ReadLabelColor(label, col);
@@ -1230,13 +1174,11 @@ namespace PfCache
                     dbg.hpSample = hp;
                 if (percent && hp <= 0.0f)
                     continue;
-
                 PfPlayer p{};
                 p.modelAddr = model.addr;
                 p.teamFolderAddr = folder.addr;
                 p.headAddr = head;
                 p.torsoAddr = torso;
-
                 if (head)
                     p.headPrim = thenwefuckin::node{ head }.primitive();
                 if (torso)
@@ -1266,7 +1208,6 @@ namespace PfCache
                 dbg.modelsKept++;
             }
         }
-
         int zeros = 0;
         for (auto& p : players)
         {
@@ -1279,13 +1220,11 @@ namespace PfCache
                 p.health = 1.0f;
             dbg.hpAllZeroFix = 1;
         }
-
         dbg.failStage = players.empty() ? "ok but empty" : "ok";
         verdictPlace = dbg.placeIdRead;
         verdictDm = thenwefuckin::g_ctx.datamodel.addr;
         verdictTime = std::chrono::steady_clock::now();
         verdictPf = true;
-
         if (g_ctx.camera.addr && g_proc)
             localPos = g_proc->read<math::vec3>(g_ctx.camera.addr + Offsets::Camera::Position);
     }
@@ -1297,7 +1236,6 @@ namespace PfCache
 #include <vector>
 #include "math.h"
 #include "../struct/structs.h"
-
 namespace thenwefuckin::visual
 {
     struct LimbCache
@@ -1327,7 +1265,6 @@ namespace thenwefuckin::visual
         uintptr_t rightLowerLegPrim = 0;
         uintptr_t rightFootPrim = 0;
     };
-
     struct WorldCache
     {
         bool valid = false;
@@ -1361,7 +1298,6 @@ namespace thenwefuckin::visual
         std::string state{};
         float hp = 0.f;
         float maxHp = 100.f;
-
         data::rect rc3d{};
         bool hasRc3d = false;
         std::vector<math::vec3> pts3d;
@@ -1378,7 +1314,6 @@ namespace thenwefuckin::visual
 #include <vector>
 #include <d3d11.h>
 #include <DirectXMath.h>
-
 namespace thenwefuckin::visual::preview
 {
     struct V3 { float x, y, z; };
@@ -1411,7 +1346,6 @@ namespace thenwefuckin::visual::preview
         ID3D11Buffer* ib = nullptr;
         uint32_t count = 0;
         std::string tag;
-
         DirectX::XMFLOAT4 tint{ 1, 1, 1, 1 };
         ID3D11ShaderResourceView* srv = nullptr;
     };
@@ -1431,7 +1365,6 @@ namespace thenwefuckin::visual::preview
 #include <mutex>
 #include <chrono>
 #include <algorithm>
-
 namespace thenwefuckin::pcache
 {
     struct Entry
@@ -1449,7 +1382,6 @@ namespace thenwefuckin::pcache
         bool valid = false;
         bool isR6 = true;
     };
-
     inline std::vector<Entry> entries;
     inline std::unordered_map<std::uintptr_t, visual::LimbCache> limbMap;
     inline std::mutex mtx;
@@ -1457,7 +1389,56 @@ namespace thenwefuckin::pcache
     inline std::chrono::steady_clock::time_point lastTopo{};
     inline std::chrono::steady_clock::time_point lastMeta{};
     inline int topoTick = 0;
-
+    inline std::uintptr_t aim_prim(const visual::LimbCache& lc, int part)
+    {
+        switch (part)
+        {
+        case 0:
+            return lc.headPrim;
+        case 1:
+            if (lc.upperPrim)
+                return lc.upperPrim;
+            if (lc.torsoPrim)
+                return lc.torsoPrim;
+            return lc.rootPrim;
+        case 2:
+            return lc.rootPrim ? lc.rootPrim : lc.headPrim;
+        case 3:
+            if (lc.isR6)
+                return lc.leftArmPrim;
+            if (lc.leftUpperArmPrim)
+                return lc.leftUpperArmPrim;
+            if (lc.leftLowerArmPrim)
+                return lc.leftLowerArmPrim;
+            return lc.leftHandPrim;
+        case 4:
+            if (lc.isR6)
+                return lc.rightArmPrim;
+            if (lc.rightUpperArmPrim)
+                return lc.rightUpperArmPrim;
+            if (lc.rightLowerArmPrim)
+                return lc.rightLowerArmPrim;
+            return lc.rightHandPrim;
+        case 5:
+            if (lc.isR6)
+                return lc.leftLegPrim;
+            if (lc.leftUpperLegPrim)
+                return lc.leftUpperLegPrim;
+            if (lc.leftLowerLegPrim)
+                return lc.leftLowerLegPrim;
+            return lc.leftFootPrim;
+        case 6:
+            if (lc.isR6)
+                return lc.rightLegPrim;
+            if (lc.rightUpperLegPrim)
+                return lc.rightUpperLegPrim;
+            if (lc.rightLowerLegPrim)
+                return lc.rightLowerLegPrim;
+            return lc.rightFootPrim;
+        default:
+            return lc.headPrim;
+        }
+    }
     inline std::uintptr_t prim_of(node c, const std::string& n)
     {
         node limb = c.find_child(n);
@@ -1465,7 +1446,6 @@ namespace thenwefuckin::pcache
             return 0;
         return limb.primitive();
     }
-
     inline visual::LimbCache build_limbs(node character)
     {
         visual::LimbCache lc{};
@@ -1529,7 +1509,6 @@ namespace thenwefuckin::pcache
         }
         return lc;
     }
-
     inline void clear()
     {
         std::lock_guard<std::mutex> lk(mtx);
@@ -1540,7 +1519,6 @@ namespace thenwefuckin::pcache
         lastMeta = std::chrono::steady_clock::time_point{};
         topoTick = 0;
     }
-
     inline void update()
     {
         using namespace thenwefuckin;
@@ -1556,7 +1534,6 @@ namespace thenwefuckin::pcache
             std::chrono::duration_cast<std::chrono::milliseconds>(now - lastFast).count() < 16)
             return;
         lastFast = now;
-
         {
             std::lock_guard<std::mutex> lk(mtx);
             for (auto& e : entries)
@@ -1586,7 +1563,6 @@ namespace thenwefuckin::pcache
             entries.erase(std::remove_if(entries.begin(), entries.end(),
                 [](const Entry& e) { return !e.valid; }), entries.end());
         }
-
         if (lastTopo != std::chrono::steady_clock::time_point{} &&
             std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTopo).count() < 500)
             return;
@@ -1595,7 +1571,6 @@ namespace thenwefuckin::pcache
         bool rescanMeta = (topoTick % 4) == 0;
         if (lastMeta == std::chrono::steady_clock::time_point{})
             rescanMeta = true;
-
         std::uintptr_t localAddr = g_ctx.local_player.addr;
         auto plist = g_ctx.player_list();
         {

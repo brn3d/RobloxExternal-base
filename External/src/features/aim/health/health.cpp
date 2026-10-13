@@ -1,6 +1,5 @@
 #include "health.h"
 #include "../../../menu/overlay/settings.h"
-
 namespace thenwefuckin::aim::health
 {
     bool check(float hp)

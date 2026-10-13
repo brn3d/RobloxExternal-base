@@ -18,7 +18,6 @@
 #include <mutex>
 #include <thread>
 #include <vector>
-
 namespace thenwefuckin::aim::wraith
 {
     namespace
@@ -31,7 +30,6 @@ namespace thenwefuckin::aim::wraith
         std::mutex s_blobMtx;
         std::thread s_thread;
         bool s_started = false;
-
         void apply_blob(std::uintptr_t addr, bool isPart, const float blob[12])
         {
             if (!addr || !g_proc)
@@ -41,7 +39,6 @@ namespace thenwefuckin::aim::wraith
             else
                 g_proc->write_buf(addr + Offsets::Camera::Rotation, blob, sizeof(float) * 12);
         }
-
         void writer_loop()
         {
             while (s_run.load(std::memory_order_acquire))
@@ -58,7 +55,6 @@ namespace thenwefuckin::aim::wraith
                         isPart = s_isPart.load(std::memory_order_relaxed);
                     }
                     apply_blob(addr, isPart, blob);
-
                     if (GetAsyncKeyState(VK_LBUTTON) & 0x8000)
                         apply_blob(addr, isPart, blob);
                 }
@@ -67,7 +63,6 @@ namespace thenwefuckin::aim::wraith
                     (s_active.load(std::memory_order_acquire) && held) ? 1 : 10));
             }
         }
-
         void ensure_writer()
         {
             if (s_started)
@@ -84,7 +79,6 @@ namespace thenwefuckin::aim::wraith
                 s_run.store(false, std::memory_order_release);
             }
         }
-
         bool resolve_target(std::uintptr_t& outAddr, bool& outIsPart)
         {
             outAddr = 0;
@@ -122,7 +116,6 @@ namespace thenwefuckin::aim::wraith
             outIsPart = false;
             return true;
         }
-
         math::vec3 target_pos(std::uintptr_t addr, bool isPart, bool& ok)
         {
             ok = false;
@@ -136,7 +129,6 @@ namespace thenwefuckin::aim::wraith
             ok = true;
             return p;
         }
-
         bool current_forward(std::uintptr_t addr, bool isPart, math::vec3& fwd)
         {
             if (!addr || !g_proc)
@@ -150,7 +142,6 @@ namespace thenwefuckin::aim::wraith
             fwd = fwd / fwd.length();
             return true;
         }
-
         void set_active(bool on, const math::vec3& target)
         {
             if (!on)
@@ -175,7 +166,6 @@ namespace thenwefuckin::aim::wraith
             if (wantFwd.length() < 0.000001f)
                 return;
             wantFwd = wantFwd / wantFwd.length();
-
             float curYaw = 0.0f, curPitch = 0.0f;
             math::vec3 curFwd{};
             if (current_forward(addr, isPart, curFwd))
@@ -185,10 +175,8 @@ namespace thenwefuckin::aim::wraith
             }
             float wantPitch = asinf(std::clamp(wantFwd.y, -1.0f, 1.0f));
             float wantYaw = atan2f(wantFwd.x, -wantFwd.z);
-
             float newYaw = wantYaw, newPitch = wantPitch;
             smooth::calculate(curYaw, curPitch, wantYaw, wantPitch, newYaw, newPitch);
-
             float cp = cosf(newPitch);
             math::vec3 look{ sinf(newYaw) * cp, sinf(newPitch), -cosf(newYaw) * cp };
             look = look.normalized();
@@ -228,20 +216,20 @@ namespace thenwefuckin::aim::wraith
             ensure_writer();
             s_active.store(true, std::memory_order_release);
         }
-
         struct CachedTarget
         {
             uintptr_t playerAddr = 0;
             uintptr_t characterAddr = 0;
             uintptr_t humanoidAddr = 0;
             uintptr_t targetPrim = 0;
+            uintptr_t teamAddr = 0;
             int partIdx = -1;
+            bool isBot = false;
+            float botHp = 100.0f;
         };
-
         std::vector<CachedTarget> s_targets;
         std::chrono::steady_clock::time_point s_lastResolve{};
         std::chrono::steady_clock::time_point s_lastScan{};
-
         void resolve_targets()
         {
             s_targets.clear();
@@ -272,23 +260,57 @@ namespace thenwefuckin::aim::wraith
                 t.characterAddr = charAddr;
                 t.humanoidAddr = humanoid.addr;
                 t.targetPrim = prim;
+                t.teamAddr = g_proc ? g_proc->read<uintptr_t>(entry.addr + Offsets::Player::Team) : 0;
                 t.partIdx = wantPart;
                 s_targets.push_back(t);
             }
+            if (settings::aim_bots)
+            {
+                std::vector<BotAimTarget> bots;
+                collect_bot_targets(bots);
+                for (auto& b : bots)
+                {
+                    std::uintptr_t prim = (wantPart == 0) ? b.headPrim : b.rootPrim;
+                    if (!prim)
+                        prim = b.headPrim ? b.headPrim : b.rootPrim;
+                    if (!prim)
+                        continue;
+                    CachedTarget t{};
+                    t.playerAddr = b.inst;
+                    t.characterAddr = b.inst;
+                    t.humanoidAddr = b.humanoid;
+                    t.targetPrim = prim;
+                    t.teamAddr = 0;
+                    t.partIdx = wantPart;
+                    t.isBot = true;
+                    t.botHp = b.hp;
+                    s_targets.push_back(t);
+                }
+            }
         }
     }
-
     bool is_active()
     {
         return s_active.load(std::memory_order_acquire);
     }
-
     void idle()
     {
         s_active.store(false, std::memory_order_release);
         s_targets.clear();
     }
-
+    void on_game_joined()
+    {
+        s_active.store(false, std::memory_order_release);
+        s_waddr.store(0, std::memory_order_relaxed);
+        s_isPart.store(false, std::memory_order_relaxed);
+        {
+            std::lock_guard<std::mutex> lk(s_blobMtx);
+            memset(s_blob, 0, sizeof(s_blob));
+        }
+        s_targets.clear();
+        s_lastResolve = std::chrono::steady_clock::time_point{};
+        s_lastScan = std::chrono::steady_clock::time_point{};
+    }
     void shutdown()
     {
         s_active.store(false, std::memory_order_release);
@@ -301,7 +323,6 @@ namespace thenwefuckin::aim::wraith
         }
         s_started = false;
     }
-
     void run(int w, int h)
     {
         if (!g_ctx.ready || !g_ctx.camera || w <= 0 || h <= 0)
@@ -310,12 +331,10 @@ namespace thenwefuckin::aim::wraith
             thenwefuckin::aim::clear_debug_target();
             return;
         }
-
         auto now = std::chrono::steady_clock::now();
         if (now - s_lastScan < std::chrono::milliseconds(4))
             return;
         s_lastScan = now;
-
         if (pftarget::active())
         {
             pftarget::PfBest b{};
@@ -329,7 +348,6 @@ namespace thenwefuckin::aim::wraith
             set_active(true, b.world);
             return;
         }
-
         int wantPart = settings::aim_part;
         if (s_targets.empty()
             || now - s_lastResolve >= std::chrono::milliseconds(200)
@@ -344,37 +362,47 @@ namespace thenwefuckin::aim::wraith
                 return;
             }
         }
-
         float cx = static_cast<float>(w) * 0.5f;
         float cy = static_cast<float>(h) * 0.5f;
         const math::view_matrix& view = g_ctx.view;
-
         math::vec3 camPos = g_proc->read<math::vec3>(g_ctx.camera.addr + Offsets::Camera::Position);
         if (camPos.x == 0.0f && camPos.y == 0.0f && camPos.z == 0.0f)
             return;
-
         math::vec3 best{};
         bool found = false;
-        float bestDist = settings::aim_fov;
+        const bool wide = settings::aim_360;
+        float bestDist = wide ? 1e9f : settings::aim_fov;
         uintptr_t bestPlayer = 0;
-
+        const uintptr_t localTeam = thenwefuckin::aim::local_team_addr();
         for (auto& t : s_targets)
         {
-            uintptr_t charAddr = g_proc->read<uintptr_t>(t.playerAddr + Offsets::Player::ModelInstance);
-            if (charAddr != t.characterAddr)
+            if (thenwefuckin::aim::should_skip_teammate(localTeam, t.teamAddr))
+                continue;
+            if (t.isBot)
             {
-                tracking::clear(t.playerAddr);
-                continue;
+                std::uintptr_t par = g_proc->read<std::uintptr_t>(t.characterAddr + Offsets::Instance::Parent);
+                if (!par)
+                    continue;
+                float bhp = t.humanoidAddr ? g_proc->read<float>(t.humanoidAddr + Offsets::Humanoid::Health) : t.botHp;
+                if (!health::check(bhp))
+                    continue;
             }
-            float hp = g_proc->read<float>(t.humanoidAddr + Offsets::Humanoid::Health);
-            if (!health::check(hp))
-                continue;
+            else
+            {
+                uintptr_t charAddr = g_proc->read<uintptr_t>(t.playerAddr + Offsets::Player::ModelInstance);
+                if (charAddr != t.characterAddr)
+                {
+                    tracking::clear(t.playerAddr);
+                    continue;
+                }
+                float hp = g_proc->read<float>(t.humanoidAddr + Offsets::Humanoid::Health);
+                if (!health::check(hp))
+                    continue;
+            }
             math::vec3 pos = g_proc->read<math::vec3>(t.targetPrim + Offsets::Primitive::Position);
             if (pos.x == 0.0f && pos.y == 0.0f && pos.z == 0.0f)
                 continue;
-
             tracking::push(t.playerAddr, pos.x, pos.y, pos.z);
-
             if (!distance::check(pos, camPos))
                 continue;
             math::vec2 s{};
@@ -382,7 +410,7 @@ namespace thenwefuckin::aim::wraith
                 continue;
             float dx = s.x - cx;
             float dy = s.y - cy;
-            float d = sqrtf(dx * dx + dy * dy);
+            float d = wide ? (pos - camPos).length() : sqrtf(dx * dx + dy * dy);
             if (d < bestDist)
             {
                 bestDist = d;
@@ -391,14 +419,12 @@ namespace thenwefuckin::aim::wraith
                 found = true;
             }
         }
-
         if (!found)
         {
             set_active(false, math::vec3{});
             thenwefuckin::aim::clear_debug_target();
             return;
         }
-
         {
             float scanDt = 0.004f;
             float smoothLag = 0.0f;
@@ -409,7 +435,6 @@ namespace thenwefuckin::aim::wraith
                 smoothLag = (sx - 1.0f) * scanDt;
             }
             float leadT = scanDt + smoothLag;
-
             tracking::Velocity tv{};
             if (bestPlayer && tracking::sample(bestPlayer, tv))
             {
@@ -421,7 +446,6 @@ namespace thenwefuckin::aim::wraith
                 best.z += (tv.vz - lv.z) * leadT * damp * airDampY;
             }
         }
-
         thenwefuckin::aim::set_debug_target(best, bestPlayer);
         set_active(true, best);
     }

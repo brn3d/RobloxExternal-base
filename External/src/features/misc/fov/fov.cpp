@@ -5,7 +5,6 @@
 #include <Windows.h>
 #include <cmath>
 #include <algorithm>
-
 namespace thenwefuckin::misc::fov
 {
     namespace
@@ -17,12 +16,10 @@ namespace thenwefuckin::misc::fov
         bool s_haveOriginalBase = false;
         uintptr_t s_lastCamera = 0;
     }
-
     static inline float deg_to_stored(float deg)
     {
         return std::tan((deg * 3.14159265358979323846f / 180.f) * 0.5f);
     }
-
     bool worker_key_down(int key)
     {
         if (key <= 0) return false;
@@ -30,7 +27,6 @@ namespace thenwefuckin::misc::fov
         if (vk != 0) return (GetAsyncKeyState(vk) & 0x8000) != 0;
         return false;
     }
-
     bool worker_want_active()
     {
         if (!settings::fov_enabled)
@@ -49,23 +45,19 @@ namespace thenwefuckin::misc::fov
         s_keyPrev = down;
         return s_keyToggled;
     }
-
     bool is_active()
     {
         return s_wasEnabled;
     }
-
     void tick_fast(bool want)
     {
         if (!want && !s_wasEnabled)
             return;
-
         if (!g_proc || !g_proc->connected())
         {
             s_wasEnabled = false;
             return;
         }
-
         if (!want)
         {
             node cam = g_ctx.resolve_camera();
@@ -75,21 +67,17 @@ namespace thenwefuckin::misc::fov
             s_lastCamera = 0;
             return;
         }
-
         if (!g_ctx.ready || !g_ctx.camera)
             return;
-
         if (g_ctx.camera.addr != s_lastCamera)
         {
             s_wasEnabled = false;
             s_lastCamera = g_ctx.camera.addr;
         }
-
         float targetDeg = std::clamp(settings::fov_value, 30.0f, 120.0f);
         float targetStored = deg_to_stored(targetDeg);
         if (!s_wasEnabled)
         {
-
             float curStored = g_proc->read<float>(g_ctx.camera.addr + Offsets::Camera::FieldOfView);
             if (curStored > 0.05f && curStored < 5.0f)
             {

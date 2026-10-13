@@ -1,7 +1,6 @@
 #include "headdot.h"
 #include "../../../utility/struct/world2screen.h"
 #include "../../../menu/overlay/settings.h"
-
 namespace thenwefuckin::visual::headdot
 {
     void draw(ImDrawList* dl, const math::vec3& head, const math::view_matrix& view, float screen_w, float screen_h, float distScale)

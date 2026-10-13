@@ -11,14 +11,11 @@
 #include <unordered_map>
 #include <chrono>
 #include <algorithm>
-
 #pragma comment(lib, "winmm.lib")
-
 namespace thenwefuckin::misc::hitsound
 {
     static std::vector<std::string> g_sounds;
     static bool g_initialized = false;
-
     static void create_default_wav(const std::string& path, float freq)
     {
         uint32_t sampleRate = 44100;
@@ -26,10 +23,8 @@ namespace thenwefuckin::misc::hitsound
         uint32_t numSamples = static_cast<uint32_t>(sampleRate * duration);
         uint32_t dataSize = numSamples * 2;
         uint32_t fileSize = 36 + dataSize;
-
         std::ofstream f(path, std::ios::binary);
         if (!f.is_open()) return;
-
         f.write("RIFF", 4);
         f.write(reinterpret_cast<const char*>(&fileSize), 4);
         f.write("WAVE", 4);
@@ -49,7 +44,6 @@ namespace thenwefuckin::misc::hitsound
         f.write(reinterpret_cast<const char*>(&bits), 2);
         f.write("data", 4);
         f.write(reinterpret_cast<const char*>(&dataSize), 4);
-
         for (uint32_t i = 0; i < numSamples; ++i)
         {
             float t = static_cast<float>(i) / static_cast<float>(sampleRate);
@@ -59,7 +53,6 @@ namespace thenwefuckin::misc::hitsound
             f.write(reinterpret_cast<const char*>(&sample), 2);
         }
     }
-
     void refresh_sounds()
     {
         g_sounds.clear();
@@ -68,7 +61,6 @@ namespace thenwefuckin::misc::hitsound
         {
             std::filesystem::create_directories("sounds", ec);
         }
-
         bool hasFiles = false;
         for (const auto& entry : std::filesystem::directory_iterator("sounds", ec))
         {
@@ -83,13 +75,11 @@ namespace thenwefuckin::misc::hitsound
                 }
             }
         }
-
         if (!hasFiles)
         {
             create_default_wav("sounds/ding.wav", 1200.0f);
             create_default_wav("sounds/bell.wav", 850.0f);
         }
-
         for (const auto& entry : std::filesystem::directory_iterator("sounds", ec))
         {
             if (entry.is_regular_file())
@@ -104,7 +94,6 @@ namespace thenwefuckin::misc::hitsound
         }
         std::sort(g_sounds.begin(), g_sounds.end());
     }
-
     std::vector<std::string> get_sound_list()
     {
         if (!g_initialized || g_sounds.empty())
@@ -114,24 +103,20 @@ namespace thenwefuckin::misc::hitsound
         }
         return g_sounds;
     }
-
     void play()
     {
         auto list = get_sound_list();
         if (list.empty())
             return;
-
         int idx = settings::hitsound_selected;
         if (idx < 0 || idx >= static_cast<int>(list.size()))
             idx = 0;
-
         std::string fullPath = "sounds/" + list[idx];
         DWORD vol16 = static_cast<DWORD>(std::clamp(settings::hitsound_volume / 100.0f, 0.0f, 1.0f) * 65535.0f);
         DWORD vol = (vol16 & 0xFFFF) | ((vol16 & 0xFFFF) << 16);
         waveOutSetVolume(0, vol);
         PlaySoundA(fullPath.c_str(), NULL, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
     }
-
     void open_folder()
     {
         std::error_code ec;
@@ -143,7 +128,6 @@ namespace thenwefuckin::misc::hitsound
         GetFullPathNameA("sounds", MAX_PATH, full, NULL);
         ShellExecuteA(NULL, "open", full, NULL, NULL, SW_SHOWNORMAL);
     }
-
     static bool aimed_at(const node& character)
     {
         if (!character || !g_ctx.camera)
@@ -167,33 +151,26 @@ namespace thenwefuckin::misc::hitsound
         float dx = sp.x - (float)sw * 0.5f;
         float dy = sp.y - (float)sh * 0.5f;
         float d = sqrtf(dx * dx + dy * dy);
-
         return d <= settings::aim_fov + 50.0f;
     }
-
     void run()
     {
         if (!settings::hitsound_enabled)
             return;
-
         static bool lastShootDown = false;
         bool shootDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
         if (settings::aim_autoshoot_key != 0 && Menu::IsKeybindDown(settings::aim_autoshoot_key))
             shootDown = true;
-
         bool justShot = shootDown && !lastShootDown;
         lastShootDown = shootDown;
-
         if (settings::hitsound_mode == 1)
         {
             if (justShot)
                 play();
             return;
         }
-
         if (!g_ctx.ready || !g_proc || !g_proc->connected())
             return;
-
         {
             static auto lastScan = std::chrono::steady_clock::now() - std::chrono::seconds(1);
             auto now0 = std::chrono::steady_clock::now();
@@ -201,19 +178,15 @@ namespace thenwefuckin::misc::hitsound
                 return;
             lastScan = now0;
         }
-
         static std::unordered_map<uintptr_t, float> prevHp;
         static auto lastShotTime = std::chrono::steady_clock::now();
         if (shootDown)
             lastShotTime = std::chrono::steady_clock::now();
-
         auto now = std::chrono::steady_clock::now();
         bool shootingRecently = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastShotTime).count() < 350;
-
         auto list = g_ctx.player_list();
         bool damageDetected = false;
         bool aimInUse = thenwefuckin::aim::debug_in_use();
-
         for (auto& entry : list)
         {
             if (entry.addr == g_ctx.local_player.addr)
@@ -221,11 +194,9 @@ namespace thenwefuckin::misc::hitsound
                 prevHp.erase(entry.addr);
                 continue;
             }
-
             node character{ g_proc->read<uintptr_t>(entry.addr + Offsets::Player::ModelInstance) };
             if (!character)
                 continue;
-
             float hp = 0.0f;
             node humanoid = find_live_humanoid(character, &hp, nullptr);
             if (!humanoid)
@@ -233,14 +204,12 @@ namespace thenwefuckin::misc::hitsound
             auto it = prevHp.find(entry.addr);
             if (it != prevHp.end() && it->second > 0.1f && hp == 0.0f)
             {
-
                 hp = g_proc->read<float>(humanoid.addr + Offsets::Humanoid::Health);
             }
             if (it != prevHp.end())
             {
                 if (it->second > 0.1f && hp < it->second - 0.5f)
                 {
-
                     if (shootingRecently)
                     {
                         bool mine = thenwefuckin::aim::debug_recent_player(entry.addr);
@@ -253,12 +222,10 @@ namespace thenwefuckin::misc::hitsound
             }
             prevHp[entry.addr] = hp;
         }
-
         if (damageDetected)
         {
             play();
         }
-
         for (auto it = prevHp.begin(); it != prevHp.end();)
         {
             bool found = false;

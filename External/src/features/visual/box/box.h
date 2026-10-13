@@ -1,6 +1,5 @@
 #pragma once
 #include "../../../menu/imgui/imgui.h"
-
 namespace thenwefuckin::visual::box
 {
     void draw(ImDrawList* dl, float x0, float y0, float x1, float y1, ImU32 col, bool outline = true, ImU32 outlineCol = IM_COL32(0,0,0,255));

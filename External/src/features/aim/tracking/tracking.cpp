@@ -1,6 +1,5 @@
 #include "tracking.h"
 #include <cmath>
-
 namespace thenwefuckin::aim::tracking
 {
     namespace
@@ -8,14 +7,12 @@ namespace thenwefuckin::aim::tracking
         constexpr size_t kMaxSamples = 14;
         constexpr long long kWindowMs = 450;
         constexpr size_t kMaxTargets = 48;
-
         std::unordered_map<uintptr_t, std::deque<Sample>>& store()
         {
             static std::unordered_map<uintptr_t, std::deque<Sample>> s;
             return s;
         }
     }
-
     void push(uintptr_t key, float x, float y, float z)
     {
         if (!key)
@@ -38,12 +35,14 @@ namespace thenwefuckin::aim::tracking
             }
         }
     }
-
     void clear(uintptr_t key)
     {
         store().erase(key);
     }
-
+    void clear_all()
+    {
+        store().clear();
+    }
     bool sample(uintptr_t key, Velocity& out)
     {
         auto it = store().find(key);
@@ -56,7 +55,6 @@ namespace thenwefuckin::aim::tracking
         size_t n = dq.size();
         if (n < 3)
             return false;
-
         double st = 0.0, stt = 0.0;
         double sx = 0.0, sy = 0.0, sz = 0.0;
         double stx = 0.0, sty = 0.0, stz = 0.0;
@@ -77,7 +75,6 @@ namespace thenwefuckin::aim::tracking
         out.vx = (float)(((double)n * stx - st * sx) / denom);
         out.vy = (float)(((double)n * sty - st * sy) / denom);
         out.vz = (float)(((double)n * stz - st * sz) / denom);
-
         float yMin = dq.front().y, yMax = dq.front().y;
         for (auto& s : dq)
         {
@@ -85,7 +82,6 @@ namespace thenwefuckin::aim::tracking
             if (s.y > yMax) yMax = s.y;
         }
         out.airborne = (fabsf(out.vy) > 6.0f) || ((yMax - yMin) > 3.5f);
-
         out.damp = 1.0f;
         if (n >= 5)
         {

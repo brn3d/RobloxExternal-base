@@ -2,7 +2,6 @@
 #include "../../../utility/cache/cache.h"
 #include "../../../menu/overlay/settings.h"
 #include "../../../menu/core/gui/menu.h"
-
 namespace thenwefuckin::misc::jumppower
 {
     void run()
@@ -12,22 +11,18 @@ namespace thenwefuckin::misc::jumppower
         static float originalJumpHeight = 7.2f;
         static uint8_t originalUseJumpPower = 0;
         static uintptr_t lastHumanoid = 0;
-
         bool active = settings::jumppower_enabled;
         if (active && settings::jumppower_key != 0)
         {
             active = Menu::IsMenuKeyActive("##jumppower_key", settings::jumppower_key, settings::jumppower_key_mode);
         }
-
         if (!active && !wasEnabled)
             return;
-
         if (!g_proc || !g_proc->connected())
         {
             wasEnabled = false;
             return;
         }
-
         if (!active)
         {
             node humanoid = g_ctx.resolve_local_humanoid();
@@ -41,20 +36,16 @@ namespace thenwefuckin::misc::jumppower
             lastHumanoid = 0;
             return;
         }
-
         if (!g_ctx.ready)
             return;
-
         node humanoid = g_ctx.local_humanoid;
         if (!humanoid)
             return;
-
         if (humanoid.addr != lastHumanoid)
         {
             wasEnabled = false;
             lastHumanoid = humanoid.addr;
         }
-
         if (!wasEnabled)
         {
             float jp = g_proc->read<float>(humanoid.addr + Offsets::Humanoid::JumpPower);

@@ -6,7 +6,6 @@
 inline ImFont* g_verdanaFont = nullptr;
 inline ImFont* g_verdanaSmallFont = nullptr;
 inline ImFont* g_tahomaFont = nullptr;
-
 #define ICON_MIN_FA 0xe005
 #define ICON_MAX_16_FA 0xf8ff
 #define ICON_MAX_FA 0xf8ff
@@ -1398,7 +1397,6 @@ inline ImFont* g_tahomaFont = nullptr;
 #define ICON_FA_YEN_SIGN "\xef\x85\x97"
 #define ICON_FA_YIN_YANG "\xef\x9a\xad"
 #define ICON_FA_Z "Z"
-
 static const ImWchar icon_ranges[]{ ICON_MIN_FA, ICON_MAX_FA, 0 };
 static const unsigned int fa6_solid_compressed_size = 234315;
 static const unsigned int fa6_solid_compressed_data[234316 / 4] =
@@ -6286,7 +6284,6 @@ static const unsigned int fa6_solid_compressed_data[234316 / 4] =
     0x0f796f62, 0x2d210a89, 0x08608273, 0x6f630e2a, 0x7475706d, 0x6d2d7265, 0x6573756f, 0x64617205, 0x720c6f69, 0x726f6365, 0x69762d64, 0x0d6c796e,
     0x6b6c6177, 0x742d6569, 0x07290684, 0x61726163, 0x006e6176, 0xc0fa0500, 0x00a66c36,
 };
-
 static const unsigned char keepCalmFontData[] = {
         0x00, 0x01, 0x00, 0x00, 0x00, 0x11, 0x01, 0x00, 0x00, 0x04, 0x00, 0x10,
     0x46, 0x46, 0x54, 0x4D, 0x64, 0xF5, 0xE2, 0xC2, 0x00, 0x00, 0x01, 0x1C,
@@ -10389,19 +10386,15 @@ static const unsigned char keepCalmFontData[] = {
     0x20, 0x45, 0xB2, 0x18, 0x0B, 0x02, 0x2B, 0xB1, 0x03, 0x46, 0x76, 0x2B,
     0x44, 0x59, 0xB0, 0x14, 0x2B, 0x00, 0x00, 0x00, 0x00, 0x01, 0x51, 0xD7,
     0xF8, 0x62, 0x00, 0x00
-
 };
 static const unsigned int keepCalmFontDataSize = sizeof(keepCalmFontData);
-
 inline void LoadVisualFonts() {
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->Clear();
-
     ImFontConfig cfg;
     cfg.OversampleH = 4;
     cfg.OversampleV = 4;
     cfg.PixelSnapH = false;
-
     ImFont* mainFont = io.Fonts->AddFontFromMemoryTTF(
         (void*)keepCalmFontData,
         (int)keepCalmFontDataSize,
@@ -10426,7 +10419,6 @@ inline void LoadVisualFonts() {
     verdanaCfg.OversampleV = 1;
     verdanaCfg.PixelSnapH = true;
     verdanaCfg.RasterizerMultiply = 1.25f;
-
     bool loadedFile = false;
     FILE* vf = nullptr;
     if (fopen_s(&vf, "C:\\Windows\\Fonts\\verdana.ttf", "rb") == 0 && vf) {
@@ -10438,7 +10430,6 @@ inline void LoadVisualFonts() {
         g_verdanaFont = io.Fonts->AddFontFromMemoryTTF((void*)VERDANA_TTF, (int)VERDANA_TTF_SIZE, 13.0f, &verdanaCfg);
     }
     g_tahomaFont = g_verdanaFont;
-
     ImFontConfig iconCfg2;
     iconCfg2.MergeMode = true;
     iconCfg2.PixelSnapH = true;
@@ -10451,13 +10442,11 @@ inline void LoadVisualFonts() {
         &iconCfg2,
         iconRanges
     );
-
     ImFontConfig verdanaSmallCfg;
     verdanaSmallCfg.OversampleH = 1;
     verdanaSmallCfg.OversampleV = 1;
     verdanaSmallCfg.PixelSnapH = true;
     verdanaSmallCfg.RasterizerMultiply = 1.25f;
-
     bool loadedSmallFile = false;
     if (loadedFile) {
         g_verdanaSmallFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\verdana.ttf", 10.0f, &verdanaSmallCfg);
@@ -10466,10 +10455,8 @@ inline void LoadVisualFonts() {
     if (!loadedSmallFile) {
         g_verdanaSmallFont = io.Fonts->AddFontFromMemoryTTF((void*)VERDANA_TTF, (int)VERDANA_TTF_SIZE, 10.0f, &verdanaSmallCfg);
     }
-
     io.Fonts->Build();
     io.FontDefault = mainFont;
-
     ImGui_ImplDX11_InvalidateDeviceObjects();
     ImGui_ImplDX11_CreateDeviceObjects();
 }

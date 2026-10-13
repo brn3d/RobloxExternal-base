@@ -25,25 +25,20 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
-
 #pragma comment(lib, "winhttp.lib")
-
 namespace thenwefuckin::explorer
 {
 namespace
 {
-
 constexpr int kMaxTreeNodes = 1500;
 constexpr int kMaxKidsShown = 150;
 constexpr int kMaxKidsCached = 200;
 constexpr int kMaxDepth = 10;
-
 char s_search[64] = "";
 int s_filter = 0;
 uintptr_t s_selected = 0;
 std::string s_status = "idle";
 std::mutex s_statusMtx;
-
 void set_status(const std::string& s)
 {
     std::lock_guard<std::mutex> lk(s_statusMtx);
@@ -55,11 +50,9 @@ std::string get_status()
     std::lock_guard<std::mutex> lk(s_statusMtx);
     return s_status;
 }
-
 void exp_log(const std::string& msg)
 {
     LOG("explorer", msg.c_str());
-
     static std::mutex logMtx;
     std::lock_guard<std::mutex> lk(logMtx);
     HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -79,7 +72,6 @@ void exp_log(const std::string& msg)
     std::cout << msg << "\n";
     SetConsoleTextAttribute(h, old.wAttributes);
 }
-
 struct SnapNode
 {
     std::string name;
@@ -101,7 +93,6 @@ std::atomic<long long> s_dbgCacheHit{ 0 };
 std::atomic<long long> s_dbgCacheMiss{ 0 };
 std::chrono::steady_clock::time_point s_dbgScanStart{};
 std::chrono::steady_clock::time_point s_dbgLastWaitLog{};
-
 void start_snapshot(uintptr_t dm)
 {
     if (!dm || s_snapRunning.exchange(true))
@@ -218,7 +209,6 @@ void start_snapshot(uintptr_t dm)
         }
     }).detach();
 }
-
 void ensure_snapshot(uintptr_t dm)
 {
     if (!dm)
@@ -250,7 +240,6 @@ void ensure_snapshot(uintptr_t dm)
     }
     start_snapshot(dm);
 }
-
 struct CachedNode
 {
     std::string name;
@@ -259,10 +248,8 @@ struct CachedNode
     bool hasKids = false;
     std::chrono::steady_clock::time_point ts{};
 };
-
 std::unordered_map<uintptr_t, CachedNode> s_cache;
 std::mutex s_cacheMtx;
-
 CachedNode get_cached(uintptr_t addr)
 {
     auto now = std::chrono::steady_clock::now();
@@ -298,7 +285,6 @@ CachedNode get_cached(uintptr_t addr)
     }
     return ec;
 }
-
 std::string instance_path(uintptr_t addr)
 {
     if (!addr)
@@ -328,7 +314,6 @@ std::string instance_path(uintptr_t addr)
     }
     return out;
 }
-
 bool contains_ci(const std::string& hay, const std::string& needleLower)
 {
     if (needleLower.empty())
@@ -351,7 +336,6 @@ bool contains_ci(const std::string& hay, const std::string& needleLower)
     }
     return false;
 }
-
 bool match_filter(const std::string& cls, int filter)
 {
     switch (filter)
@@ -364,7 +348,6 @@ bool match_filter(const std::string& cls, int filter)
     default: return true;
     }
 }
-
 struct SearchResult
 {
     uintptr_t addr = 0;
@@ -374,7 +357,6 @@ struct SearchResult
     std::string top;
     std::string sub;
 };
-
 struct FileNode
 {
     std::string name;
@@ -389,7 +371,6 @@ std::string s_fileName;
 size_t s_fileCount = 0;
 std::atomic<bool> s_fileLoading{ false };
 bool s_useFile = false;
-
 struct NodeView
 {
     std::string name;
@@ -398,7 +379,6 @@ struct NodeView
     bool hasKids = false;
     bool ok = false;
 };
-
 bool view_node(uintptr_t addr, NodeView& out)
 {
     out = NodeView{};
@@ -445,7 +425,6 @@ bool view_node(uintptr_t addr, NodeView& out)
     out.ok = true;
     return true;
 }
-
 std::string view_parent_name(uintptr_t addr)
 {
     if (s_useFile && s_fileRoot)
@@ -475,7 +454,6 @@ std::string view_parent_name(uintptr_t addr)
     std::string pn = node{ addr }.parent().name();
     return pn.empty() ? "None" : pn;
 }
-
 std::string view_path(uintptr_t addr)
 {
     if (s_useFile && s_fileRoot)
@@ -527,7 +505,6 @@ std::string view_path(uintptr_t addr)
     }
     return instance_path(addr);
 }
-
 std::vector<SearchResult> s_results;
 std::mutex s_resultsMtx;
 std::atomic<int> s_resultsVer{ 0 };
@@ -544,7 +521,6 @@ std::string s_pendingQuery;
 int s_pendingFilter = 0;
 std::mutex s_pendingMtx;
 bool s_hasPending = false;
-
 void run_search_scan(const std::string& query, int filter)
 {
     auto t0 = std::chrono::steady_clock::now();
@@ -693,7 +669,6 @@ void run_search_scan(const std::string& query, int filter)
         exp_log(b);
     }
 }
-
 void trigger_search(const std::string& query, int filter)
 {
     {
@@ -724,9 +699,7 @@ void trigger_search(const std::string& query, int filter)
         s_searchRunning = false;
     }).detach();
 }
-
 std::atomic<bool> s_dumping{ false };
-
 void load_dump_file(const std::string& path)
 {
     if (s_fileLoading.exchange(true))
@@ -815,7 +788,6 @@ void load_dump_file(const std::string& path)
         set_status(b);
     }).detach();
 }
-
 bool pick_dump_file(std::string& out)
 {
     wchar_t buf[MAX_PATH]{};
@@ -832,7 +804,6 @@ bool pick_dump_file(std::string& out)
     out = nb;
     return true;
 }
-
 std::string dump_dir()
 {
     char* up = nullptr;
@@ -843,7 +814,6 @@ std::string dump_dir()
         free(up);
     return base + "\\Desktop\\thenwefuckin dumps\\";
 }
-
 void dump_all()
 {
     if (s_dumping.exchange(true))
@@ -914,11 +884,9 @@ void dump_all()
         s_dumping.store(false);
     }).detach();
 }
-
 std::atomic<bool> s_imgDumping{ false };
 std::atomic<int> s_imgDone{ 0 };
 std::atomic<int> s_imgTotal{ 0 };
-
 std::string read_img_str(uintptr_t addr, uintptr_t off)
 {
     if (!addr || !g_proc || !g_proc->connected())
@@ -939,7 +907,6 @@ std::string read_img_str(uintptr_t addr, uintptr_t off)
     }
     return {};
 }
-
 std::string img_http_get(const std::wstring& host, const std::wstring& path)
 {
     std::string out;
@@ -978,7 +945,6 @@ std::string img_http_get(const std::wstring& host, const std::wstring& path)
     WinHttpCloseHandle(hs);
     return out;
 }
-
 std::string img_asset_url(const std::string& json)
 {
     auto p = json.find("imageUrl");
@@ -997,7 +963,6 @@ std::string img_asset_url(const std::string& json)
     }
     return url;
 }
-
 void dump_images()
 {
     if (s_imgDumping.exchange(true))
@@ -1136,7 +1101,6 @@ void dump_images()
         s_imgDumping.store(false);
     }).detach();
 }
-
 int s_rendered = 0;
 bool s_needOpenLog = true;
 uintptr_t s_lastRootDbg = 0;
@@ -1145,7 +1109,6 @@ std::chrono::steady_clock::time_point s_indepTs{};
 uintptr_t s_lastLiveDm = 0;
 std::chrono::steady_clock::time_point s_lastPoll{};
 std::unordered_map<uintptr_t, std::string> s_knownPlayers;
-
 uintptr_t explorer_datamodel()
 {
     if (s_useFile && s_fileRoot)
@@ -1169,7 +1132,6 @@ uintptr_t explorer_datamodel()
     }
     return s_indepDm;
 }
-
 void poll_game_events(uintptr_t dm)
 {
     auto now = std::chrono::steady_clock::now();
@@ -1251,7 +1213,6 @@ void poll_game_events(uintptr_t dm)
     }
     s_knownPlayers.swap(cur);
 }
-
 struct IconTex
 {
     ID3D11ShaderResourceView* tex = nullptr;
@@ -1260,7 +1221,6 @@ struct IconTex
 std::unordered_map<std::string, IconTex> g_iconCache;
 std::mutex g_iconMutex;
 bool g_texturesLoaded = false;
-
 bool load_tex_from_mem(const unsigned char* data, unsigned int len, const std::string& name)
 {
     ID3D11Device* dev = ::Overlay::GetDeviceStatic();
@@ -1307,7 +1267,6 @@ bool load_tex_from_mem(const unsigned char* data, unsigned int len, const std::s
     g_iconCache[name] = IconTex{ srv, w, h };
     return true;
 }
-
 #define LOAD_ICON(name) load_tex_from_mem(name##_png, name##_png_len, #name)
 void load_all_icons()
 {
@@ -1321,7 +1280,6 @@ void load_all_icons()
     std::snprintf(b, sizeof(b), "loaded %zu class icons", g_iconCache.size());
     exp_log(b);
 }
-
 IconTex* get_icon(const std::string& cls)
 {
     std::lock_guard<std::mutex> lk(g_iconMutex);
@@ -1333,7 +1291,6 @@ IconTex* get_icon(const std::string& cls)
         return &fb->second;
     return nullptr;
 }
-
 void draw_node(uintptr_t addr, int depth)
 {
     if (!addr || s_rendered > kMaxTreeNodes || depth > kMaxDepth)
@@ -1380,7 +1337,6 @@ void draw_node(uintptr_t addr, int depth)
         ImGui::TreePop();
     }
 }
-
 std::string trunc_fit(ImFont* f, float fs, const std::string& s, float maxW)
 {
     if (s.empty())
@@ -1399,9 +1355,7 @@ std::string trunc_fit(ImFont* f, float fs, const std::string& s, float maxW)
     }
     return out;
 }
-
 }
-
 void on_close()
 {
     std::lock_guard<std::mutex> lk(s_resultsMtx);
@@ -1425,7 +1379,6 @@ void on_close()
     s_useFile = false;
     s_knownPlayers.clear();
 }
-
 void render(ImDrawList* dl, ImVec2 pos, ImVec2 mx)
 {
     using namespace Menu;
@@ -1480,11 +1433,9 @@ void render(ImDrawList* dl, ImVec2 pos, ImVec2 mx)
     ImFont* f = g_fontSmall ? g_fontSmall : ImGui::GetFont();
     const float fs = 13.0f;
     const ImU32 col_outline = IM_COL32(0, 0, 0, 255);
-
     const float left = pos.x + 14.0f;
     const float right = mx.x - 14.0f;
     float y = pos.y + 24.0f;
-
     DrawOutlinedText(dl, f, 12.0f, ImVec2(left, y), TextDimU32(), col_outline, "search");
     DrawOutlinedText(dl, f, 12.0f, ImVec2(left + 308.0f, y), TextDimU32(), col_outline, "filter");
     {
@@ -1511,7 +1462,6 @@ void render(ImDrawList* dl, ImVec2 pos, ImVec2 mx)
     DrawDropdownSingle("##exp_filter", dl, ImVec2(left + 308.0f, y), 150.0f, &s_filter,
         kFilterItems, 5, nullptr, f, fs);
     y += 28.0f;
-
     const float gy0 = y;
     const float gy1 = mx.y - 10.0f;
     const float leftW = 392.0f;
@@ -1519,7 +1469,6 @@ void render(ImDrawList* dl, ImVec2 pos, ImVec2 mx)
     ImVec2 smin(left + leftW + 8.0f, gy0), smax(right, gy1);
     DrawGroupBox(dl, bmin, bmax, "browser", f, fs, GroupU32(), BorderU32(), col_outline);
     DrawGroupBox(dl, smin, smax, "selection", f, fs, GroupU32(), BorderU32(), col_outline);
-
     const ImVec2 treeMin(bmin.x + 8.0f, bmin.y + 20.0f);
     const ImVec2 treeMax(bmax.x - 8.0f, bmax.y - 8.0f);
     if (!g_texturesLoaded)
@@ -1629,7 +1578,6 @@ void render(ImDrawList* dl, ImVec2 pos, ImVec2 mx)
     ImGui::EndChild();
     ImGui::PopFont();
     ImGui::PopStyleColor(4);
-
     float ry = smin.y + 20.0f;
     const float rx = smin.x + 8.0f;
     const float rw = (smax.x - 8.0f) - rx;
@@ -1641,7 +1589,6 @@ void render(ImDrawList* dl, ImVec2 pos, ImVec2 mx)
             dimVal ? TextDimU32() : TextU32(), col_outline, t.c_str());
         ry += 16.0f;
     };
-
     bool offline = (s_useFile && s_fileRoot);
     node sel{ s_selected };
     NodeView sv;
@@ -1667,7 +1614,6 @@ void render(ImDrawList* dl, ImVec2 pos, ImVec2 mx)
         row("address", addrBuf);
         row("children", kidBuf);
         ry -= 6.0f;
-
         const uintptr_t va = s_selected + Offsets::Value::Value;
         if (!offline && selCls == "NumberValue")
         {
@@ -1736,7 +1682,6 @@ void render(ImDrawList* dl, ImVec2 pos, ImVec2 mx)
             "select an instance");
         ry += 20.0f;
     }
-
     const float bh = 20.0f, gap = 6.0f;
     const float half = (rw - gap) * 0.5f;
     auto copy_btn = [&](const char* txt, float bx, float bw, const std::string& v) {
@@ -1836,7 +1781,6 @@ void render(ImDrawList* dl, ImVec2 pos, ImVec2 mx)
         DrawOutlinedText(dl, f, 11.0f, ImVec2(rx, ry), TextDimU32(), col_outline, t.c_str());
         ry += 15.0f;
     }
-
     if (ry + 28.0f <= smax.y - 6.0f)
     {
         size_t cacheN = 0;
@@ -1853,5 +1797,4 @@ void render(ImDrawList* dl, ImVec2 pos, ImVec2 mx)
         DrawOutlinedText(dl, f, 11.0f, ImVec2(rx, ry + 13.0f), TextDimU32(), col_outline, d2);
     }
 }
-
 }

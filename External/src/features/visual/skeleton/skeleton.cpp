@@ -1,6 +1,5 @@
 #include "skeleton.h"
 #include "../../../utility/struct/world2screen.h"
-
 namespace thenwefuckin::visual::skeleton
 {
     bool project_pair(
@@ -23,7 +22,6 @@ namespace thenwefuckin::visual::skeleton
             return false;
         return true;
     }
-
     static void try_push(
         output& out,
         const math::vec3& wa,
@@ -37,7 +35,6 @@ namespace thenwefuckin::visual::skeleton
         if (project_pair(wa, wb, view, screen_w, screen_h, sa, sb))
             out.push(sa, sb);
     }
-
     output build_r6(
         const pose_r6& p,
         const math::view_matrix& view,
@@ -46,26 +43,22 @@ namespace thenwefuckin::visual::skeleton
     {
         output out{};
         auto zero = [](const math::vec3& v){ return v.x==0&&v.y==0&&v.z==0; };
-
         if (p.has_torsoFrame && !zero(p.head) && !zero(p.torso)) {
             math::vec3 right = p.torsoFrame.right();
             math::vec3 up = p.torsoFrame.up();
             float rl = right.length(); if(rl>0.01f) right = right * (1.0f/rl);
             float ul = up.length(); if(ul>0.01f) up = up * (1.0f/ul);
-
             math::vec3 neck = {p.torso.x + up.x*0.82f, p.torso.y + up.y*0.82f, p.torso.z + up.z*0.82f};
             math::vec3 hip = {p.torso.x - up.x*1.05f, p.torso.y - up.y*1.05f, p.torso.z - up.z*1.05f};
             math::vec3 lShoulder = {neck.x + right.x*(-1.38f), neck.y + right.y*(-1.38f), neck.z + right.z*(-1.38f)};
             math::vec3 rShoulder = {neck.x + right.x*(1.38f), neck.y + right.y*(1.38f), neck.z + right.z*(1.38f)};
             math::vec3 lHip = {hip.x + right.x*(-0.60f), hip.y + right.y*(-0.60f), hip.z + right.z*(-0.60f)};
             math::vec3 rHip = {hip.x + right.x*(0.60f), hip.y + right.y*(0.60f), hip.z + right.z*(0.60f)};
-
             math::vec3 armLExt = p.arm_l, armRExt = p.arm_r, legLExt = p.leg_l, legRExt = p.leg_r;
             if (p.has_arm_l) armLExt = {p.arm_l.x + up.x*(-0.55f), p.arm_l.y + up.y*(-0.55f), p.arm_l.z + up.z*(-0.55f)};
             if (p.has_arm_r) armRExt = {p.arm_r.x + up.x*(-0.55f), p.arm_r.y + up.y*(-0.55f), p.arm_r.z + up.z*(-0.55f)};
             if (p.has_leg_l) legLExt = {p.leg_l.x + up.x*(-0.85f), p.leg_l.y + up.y*(-0.85f), p.leg_l.z + up.z*(-0.85f)};
             if (p.has_leg_r) legRExt = {p.leg_r.x + up.x*(-0.85f), p.leg_r.y + up.y*(-0.85f), p.leg_r.z + up.z*(-0.85f)};
-
             try_push(out, p.head, neck, view, screen_w, screen_h);
             if (p.has_arm_l) {
                 try_push(out, neck, lShoulder, view, screen_w, screen_h);
@@ -86,7 +79,6 @@ namespace thenwefuckin::visual::skeleton
             } else try_push(out, hip, rHip, view, screen_w, screen_h);
             return out;
         }
-
         auto lerp = [](const math::vec3& a, const math::vec3& b, float t){ return math::vec3(a.x + (b.x-a.x)*t, a.y + (b.y-a.y)*t, a.z + (b.z-a.z)*t); };
         math::vec3 neck = p.torso;
         math::vec3 hip = p.torso;
@@ -111,7 +103,6 @@ namespace thenwefuckin::visual::skeleton
         if (p.has_leg_r) try_push(out, legSrc, p.leg_r, view, screen_w, screen_h);
         return out;
     }
-
     output build_r15(
         const pose_r15& p,
         const math::view_matrix& view,
@@ -127,7 +118,6 @@ namespace thenwefuckin::visual::skeleton
             neck = lerp(p.upper, p.head, 0.45f);
             hasNeck = true;
         }
-
         if (hasNeck) {
             try_push(out, p.head, neck, view, screen_w, screen_h);
             try_push(out, neck, p.upper, view, screen_w, screen_h);
@@ -135,9 +125,7 @@ namespace thenwefuckin::visual::skeleton
             try_push(out, p.head, p.upper, view, screen_w, screen_h);
         }
         if (p.has_lower && !zero(p.lower)) try_push(out, p.upper, p.lower, view, screen_w, screen_h);
-
         math::vec3 shoulderSrc = hasNeck ? neck : p.upper;
-
         if (!zero(p.l_upArm)) {
             try_push(out, shoulderSrc, p.l_upArm, view, screen_w, screen_h);
             if (!zero(p.l_lowArm)) {
@@ -166,7 +154,6 @@ namespace thenwefuckin::visual::skeleton
         } else if (!zero(p.hand_r)) {
             try_push(out, shoulderSrc, p.hand_r, view, screen_w, screen_h);
         }
-
         math::vec3 hipSrc = (p.has_lower && !zero(p.lower)) ? p.lower : p.upper;
         if (!zero(p.l_upLeg)) {
             try_push(out, hipSrc, p.l_upLeg, view, screen_w, screen_h);

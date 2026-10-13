@@ -3,7 +3,6 @@
 #include "../../../menu/overlay/settings.h"
 #include "../../../menu/core/gui/menu.h"
 #include <algorithm>
-
 namespace thenwefuckin::misc::hipheight
 {
     void run()
@@ -11,22 +10,18 @@ namespace thenwefuckin::misc::hipheight
         static bool wasEnabled = false;
         static float originalHipHeight = 0.0f;
         static uintptr_t lastHumanoid = 0;
-
         bool active = settings::hipheight_enabled;
         if (active && settings::hipheight_key != 0)
         {
             active = Menu::IsMenuKeyActive("##hipheight_key", settings::hipheight_key, settings::hipheight_key_mode);
         }
-
         if (!active && !wasEnabled)
             return;
-
         if (!g_proc || !g_proc->connected())
         {
             wasEnabled = false;
             return;
         }
-
         if (!active)
         {
             node humanoid = g_ctx.resolve_local_humanoid();
@@ -36,20 +31,16 @@ namespace thenwefuckin::misc::hipheight
             lastHumanoid = 0;
             return;
         }
-
         if (!g_ctx.ready)
             return;
-
         node humanoid = g_ctx.local_humanoid;
         if (!humanoid)
             return;
-
         if (humanoid.addr != lastHumanoid)
         {
             wasEnabled = false;
             lastHumanoid = humanoid.addr;
         }
-
         float cur = g_proc->read<float>(humanoid.addr + Offsets::Humanoid::HipHeight);
         if (!wasEnabled)
         {

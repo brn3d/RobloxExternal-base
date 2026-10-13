@@ -12,66 +12,94 @@
 #include <cmath>
 #include <algorithm>
 #include <chrono>
+#include <mutex>
 #include <vector>
-
 namespace thenwefuckin::aim::mouse
 {
     static inline node get_target_node(const node& character, int partIdx);
-
     struct CachedTarget
     {
         uintptr_t playerAddr = 0;
         uintptr_t characterAddr = 0;
         uintptr_t humanoidAddr = 0;
         uintptr_t targetPrim = 0;
+        uintptr_t teamAddr = 0;
         int partIdx = -1;
+        bool isBot = false;
+        float botHp = 100.0f;
     };
-
     static std::vector<CachedTarget> s_targets;
     static std::chrono::steady_clock::time_point s_lastResolve{};
     static std::chrono::steady_clock::time_point s_lastScan{};
-
     static float s_remX = 0.0f;
     static float s_remY = 0.0f;
     static bool s_inDeadzone = false;
     static uintptr_t s_dzPlayer = 0;
     static std::chrono::steady_clock::time_point s_lastSend{};
-
+    void on_game_joined()
+    {
+        s_targets.clear();
+        s_lastResolve = std::chrono::steady_clock::time_point{};
+        s_lastScan = std::chrono::steady_clock::time_point{};
+        s_remX = 0.0f;
+        s_remY = 0.0f;
+        s_inDeadzone = false;
+        s_dzPlayer = 0;
+        s_lastSend = std::chrono::steady_clock::time_point{};
+    }
     static void resolve_targets()
     {
         s_targets.clear();
         int wantPart = settings::aim_part;
-        auto list = g_ctx.player_list();
-        s_targets.reserve(list.size());
-        for (auto& entry : list)
+        std::vector<pcache::Entry> snap;
         {
-            if (entry.addr == g_ctx.local_player.addr)
+            std::lock_guard<std::mutex> lk(pcache::mtx);
+            snap = pcache::entries;
+        }
+        s_targets.reserve(snap.size());
+        std::uintptr_t localAddr = g_ctx.local_player.addr;
+        for (auto& e : snap)
+        {
+            if (!e.valid || e.player == localAddr)
                 continue;
-            node character = g_ctx.get_character(entry);
-            if (!character)
+            if (!e.humanoid)
                 continue;
-            uintptr_t charAddr = character.addr;
-            node humanoid = find_live_humanoid(character);
-            if (!humanoid)
-                continue;
-            node targetPart = get_target_node(character, wantPart);
-            if (!targetPart)
-                targetPart = character.find_child("Head");
-            if (!targetPart)
-                continue;
-            uintptr_t prim = targetPart.primitive();
+            std::uintptr_t prim = pcache::aim_prim(e.lc, wantPart);
             if (!prim)
                 continue;
             CachedTarget t{};
-            t.playerAddr = entry.addr;
-            t.characterAddr = charAddr;
-            t.humanoidAddr = humanoid.addr;
+            t.playerAddr = e.player;
+            t.characterAddr = e.model;
+            t.humanoidAddr = e.humanoid;
             t.targetPrim = prim;
+            t.teamAddr = e.team;
             t.partIdx = wantPart;
             s_targets.push_back(t);
         }
+        if (settings::aim_bots)
+        {
+            std::vector<BotAimTarget> bots;
+            collect_bot_targets(bots);
+            for (auto& b : bots)
+            {
+                std::uintptr_t prim = (wantPart == 0) ? b.headPrim : b.rootPrim;
+                if (!prim)
+                    prim = b.headPrim ? b.headPrim : b.rootPrim;
+                if (!prim)
+                    continue;
+                CachedTarget t{};
+                t.playerAddr = b.inst;
+                t.characterAddr = b.inst;
+                t.humanoidAddr = b.humanoid;
+                t.targetPrim = prim;
+                t.teamAddr = 0;
+                t.partIdx = wantPart;
+                t.isBot = true;
+                t.botHp = b.hp;
+                s_targets.push_back(t);
+            }
+        }
     }
-
     static inline node get_target_node(const node& character, int partIdx)
     {
         switch (partIdx)
@@ -124,7 +152,6 @@ namespace thenwefuckin::aim::mouse
             return character.find_child("Head");
         }
     }
-
     static void send_mouse_move(float dx, float dy)
     {
         auto now = std::chrono::steady_clock::now();
@@ -138,22 +165,16 @@ namespace thenwefuckin::aim::mouse
             return;
         }
         s_lastSend = now;
-
         dx += s_remX;
         dy += s_remY;
-
         int ix = static_cast<int>(std::round(dx));
         int iy = static_cast<int>(std::round(dy));
-
         s_remX = dx - static_cast<float>(ix);
         s_remY = dy - static_cast<float>(iy);
-
         if (fabsf(s_remX) > 8.0f) s_remX = 0.0f;
         if (fabsf(s_remY) > 8.0f) s_remY = 0.0f;
-
         if (ix == 0 && iy == 0)
             return;
-
         INPUT in{};
         in.type = INPUT_MOUSE;
         in.mi.dwFlags = MOUSEEVENTF_MOVE;
@@ -161,7 +182,6 @@ namespace thenwefuckin::aim::mouse
         in.mi.dy = iy;
         SendInput(1, &in, sizeof(in));
     }
-
     static void pf_run(int w, int h)
     {
         pftarget::PfBest b{};
@@ -179,7 +199,6 @@ namespace thenwefuckin::aim::mouse
             s_inDeadzone = false;
             s_dzPlayer = b.model;
         }
-
         if (settings::aim_deadzone_enabled)
         {
             int dzMin = settings::aim_deadzone_min;
@@ -197,17 +216,13 @@ namespace thenwefuckin::aim::mouse
         {
             s_inDeadzone = false;
         }
-
         thenwefuckin::aim::set_debug_target(b.world, b.model);
-
         float dx = b.screen.x - (float)w * 0.5f;
         float dy = b.screen.y - (float)h * 0.5f;
-
         if (!std::isfinite(dx) || !std::isfinite(dy))
             return;
         if (fabsf(dx) > (float)w || fabsf(dy) > (float)h)
             return;
-
         if (settings::aim_smoothing_enabled)
         {
             float sx = settings::aim_smoothing_x;
@@ -217,10 +232,8 @@ namespace thenwefuckin::aim::mouse
             dx /= sx;
             dy /= sy;
         }
-
         send_mouse_move(dx, dy);
     }
-
     void run(int w, int h)
     {
         if (!g_ctx.ready)
@@ -236,18 +249,15 @@ namespace thenwefuckin::aim::mouse
             thenwefuckin::aim::clear_debug_target();
             return;
         }
-
         auto now = std::chrono::steady_clock::now();
-        if (now - s_lastScan < std::chrono::milliseconds(4))
+        if (now - s_lastScan < std::chrono::milliseconds(8))
             return;
         s_lastScan = now;
-
         if (pftarget::active())
         {
             pf_run(w, h);
             return;
         }
-
         int wantPart = settings::aim_part;
         if (s_targets.empty()
             || now - s_lastResolve >= std::chrono::milliseconds(200)
@@ -258,38 +268,48 @@ namespace thenwefuckin::aim::mouse
             if (s_targets.empty())
                 return;
         }
-
         float cx = static_cast<float>(w) * 0.5f;
         float cy = static_cast<float>(h) * 0.5f;
-
         const math::view_matrix& view = g_ctx.view;
-
         math::vec3 camPos = g_proc->read<math::vec3>(g_ctx.camera.addr + Offsets::Camera::Position);
         if (camPos.x == 0.0f && camPos.y == 0.0f && camPos.z == 0.0f)
             return;
-
         math::vec3 best{};
         bool found = false;
-        float bestDist = settings::aim_fov;
+        const bool wide = settings::aim_360;
+        float bestDist = wide ? 1e9f : settings::aim_fov;
+        float bestPx = 1e9f;
         uintptr_t bestPlayer = 0;
-
+        const uintptr_t localTeam = thenwefuckin::aim::local_team_addr();
         for (auto& t : s_targets)
         {
-            uintptr_t charAddr = g_proc->read<uintptr_t>(t.playerAddr + Offsets::Player::ModelInstance);
-            if (charAddr != t.characterAddr)
+            if (thenwefuckin::aim::should_skip_teammate(localTeam, t.teamAddr))
+                continue;
+            if (t.isBot)
             {
-                tracking::clear(t.playerAddr);
-                continue;
+                std::uintptr_t par = g_proc->read<std::uintptr_t>(t.characterAddr + Offsets::Instance::Parent);
+                if (!par)
+                    continue;
+                float bhp = t.humanoidAddr ? g_proc->read<float>(t.humanoidAddr + Offsets::Humanoid::Health) : t.botHp;
+                if (!health::check(bhp))
+                    continue;
             }
-            float hp = g_proc->read<float>(t.humanoidAddr + Offsets::Humanoid::Health);
-            if (!health::check(hp))
-                continue;
+            else
+            {
+                uintptr_t charAddr = g_proc->read<uintptr_t>(t.playerAddr + Offsets::Player::ModelInstance);
+                if (charAddr != t.characterAddr)
+                {
+                    tracking::clear(t.playerAddr);
+                    continue;
+                }
+                float hp = g_proc->read<float>(t.humanoidAddr + Offsets::Humanoid::Health);
+                if (!health::check(hp))
+                    continue;
+            }
             math::vec3 pos = g_proc->read<math::vec3>(t.targetPrim + Offsets::Primitive::Position);
             if (pos.x == 0.0f && pos.y == 0.0f && pos.z == 0.0f)
                 continue;
-
             tracking::push(t.playerAddr, pos.x, pos.y, pos.z);
-
             if (!distance::check(pos, camPos))
                 continue;
             math::vec2 s{};
@@ -297,16 +317,17 @@ namespace thenwefuckin::aim::mouse
                 continue;
             float dx = s.x - cx;
             float dy = s.y - cy;
-            float d = sqrtf(dx * dx + dy * dy);
+            float px = sqrtf(dx * dx + dy * dy);
+            float d = wide ? (pos - camPos).length() : px;
             if (d < bestDist)
             {
                 bestDist = d;
+                bestPx = px;
                 best = pos;
                 bestPlayer = t.playerAddr;
                 found = true;
             }
         }
-
         if (!found)
         {
             s_inDeadzone = false;
@@ -321,16 +342,15 @@ namespace thenwefuckin::aim::mouse
             s_inDeadzone = false;
             s_dzPlayer = bestPlayer;
         }
-
         if (settings::aim_deadzone_enabled)
         {
             int dzMin = settings::aim_deadzone_min;
             int dzMax = settings::aim_deadzone_max;
             if (dzMin < 0) dzMin = 0;
             if (dzMax < dzMin) dzMax = dzMin;
-            if (!s_inDeadzone && bestDist <= (float)dzMin)
+            if (!s_inDeadzone && bestPx <= (float)dzMin)
                 s_inDeadzone = true;
-            else if (s_inDeadzone && bestDist > (float)dzMax)
+            else if (s_inDeadzone && bestPx > (float)dzMax)
                 s_inDeadzone = false;
             if (s_inDeadzone)
                 return;
@@ -339,7 +359,6 @@ namespace thenwefuckin::aim::mouse
         {
             s_inDeadzone = false;
         }
-
         {
             float scanDt = 0.004f;
             float smoothLag = 0.0f;
@@ -350,7 +369,6 @@ namespace thenwefuckin::aim::mouse
                 smoothLag = (sx - 1.0f) * scanDt;
             }
             float leadT = scanDt + smoothLag;
-
             tracking::Velocity tv{};
             if (bestPlayer && tracking::sample(bestPlayer, tv))
             {
@@ -362,21 +380,16 @@ namespace thenwefuckin::aim::mouse
                 best.z += (tv.vz - lv.z) * leadT * damp;
             }
         }
-
         thenwefuckin::aim::set_debug_target(best, bestPlayer);
-
         math::vec2 targetScreen{};
         if (!projection::to_screen(best, view, static_cast<float>(w), static_cast<float>(h), targetScreen))
             return;
-
         float dx = targetScreen.x - cx;
         float dy = targetScreen.y - cy;
-
         if (!std::isfinite(dx) || !std::isfinite(dy))
             return;
         if (fabsf(dx) > (float)w || fabsf(dy) > (float)h)
             return;
-
         if (settings::aim_smoothing_enabled)
         {
             float sx = settings::aim_smoothing_x;
@@ -386,7 +399,6 @@ namespace thenwefuckin::aim::mouse
             dx /= sx;
             dy /= sy;
         }
-
         send_mouse_move(dx, dy);
     }
 }

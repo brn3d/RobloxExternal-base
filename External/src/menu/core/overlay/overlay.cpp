@@ -8,7 +8,6 @@
 #include <chrono>
 #include <thread>
 #include <mmsystem.h>
-
 #ifndef DXGI_PRESENT_ALLOW_TEARING
 #define DXGI_PRESENT_ALLOW_TEARING 0x00000200U
 #endif
@@ -18,7 +17,6 @@
 #ifndef DXGI_PRESENT_DO_NOT_WAIT
 #define DXGI_PRESENT_DO_NOT_WAIT 0x00000001U
 #endif
-
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "d3d11.lib")
@@ -39,7 +37,6 @@ Overlay::Overlay(const OverlayConfig& cfg) : m_cfg(cfg)
     m_fpsTimer = std::chrono::steady_clock::now();
     m_lastFrameStart = m_fpsTimer;
 }
-
 void Overlay::SetFrameInterval(float seconds)
 {
     s_frameInterval = (seconds > 0.0f) ? seconds : 0.0f;
@@ -105,7 +102,6 @@ void Overlay::Run()
                 SetClickThrough(!vis);
             }
         }
-
         if (!s_renderEnabled && !g_menuOpen)
         {
             while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
@@ -121,10 +117,16 @@ void Overlay::Run()
             {
                 break;
             }
+            if (m_renderCb)
+            {
+                try { m_renderCb(nullptr, m_width, m_height, m_fps, false); }
+                catch (...) {}
+                if (s_renderEnabled)
+                    continue;
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(4));
             continue;
         }
-
         s_renderEnabled = true;
         BeginFrame();
         ImGui_ImplDX11_NewFrame();
@@ -154,7 +156,6 @@ void Overlay::Run()
                 }
             }
             m_lastFrameStart = frameStart;
-
             if (s_frameInterval > 0.0f)
             {
                 auto elapsed = std::chrono::duration<float>(std::chrono::steady_clock::now() - frameStart).count();
@@ -308,10 +309,8 @@ bool Overlay::CreateOverlayWindow()
     RegisterRawInputDevices(&rid, 1, sizeof(rid));
     return true;
 }
-
 static std::atomic<long> s_rawDx{ 0 };
 static std::atomic<long> s_rawDy{ 0 };
-
 void Overlay::ConsumeMouseDelta(long& dx, long& dy)
 {
     dx = s_rawDx.exchange(0, std::memory_order_relaxed);
@@ -416,7 +415,6 @@ LRESULT CALLBACK Overlay::WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
     {
         CREATESTRUCTW* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
         SetWindowLongPtrW(hWnd, GWLP_USERDATA, (LONG_PTR)cs->lpCreateParams);
-
         return TRUE;
     }
     Overlay* ov = reinterpret_cast<Overlay*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
@@ -429,7 +427,6 @@ LRESULT CALLBACK Overlay::WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
     bool feedImgui = menuActive;
     if (!feedImgui && dockLive && (msg == WM_SETCURSOR || (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST)))
     {
-
         int lx = 0;
         int ly = 0;
         if (msg == WM_SETCURSOR)
@@ -460,7 +457,6 @@ LRESULT CALLBACK Overlay::WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
     {
     case WM_NCHITTEST:
     {
-
         POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         int lx = pt.x - ov->m_posX;
         int ly = pt.y - ov->m_posY;
@@ -471,7 +467,6 @@ LRESULT CALLBACK Overlay::WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
         return menuActive ? HTCLIENT : HTTRANSPARENT;
     }
     case WM_ERASEBKGND:
-
         return 1;
     case WM_MOUSEACTIVATE:
         if (menuActive)
@@ -525,7 +520,6 @@ bool Overlay::InitD3D()
     sd.BufferDesc.Height = (UINT)m_height;
     sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     sd.BufferDesc.RefreshRate = { 0, 1 };
-
     sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
     sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     sd.OutputWindow = m_hwnd;
@@ -541,7 +535,6 @@ bool Overlay::InitD3D()
     HRESULT hr = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, levels, 2, D3D11_SDK_VERSION, &sd, &m_swapChain, &m_device, &fl, &m_ctx);
     if (FAILED(hr))
     {
-
         sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
         hr = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, levels, 2, D3D11_SDK_VERSION, &sd, &m_swapChain, &m_device, &fl, &m_ctx);
     }
@@ -549,7 +542,6 @@ bool Overlay::InitD3D()
     {
         return false;
     }
-
     if (IDXGIDevice1* dxgi1 = nullptr)
     {
         if (SUCCEEDED(m_device->QueryInterface(__uuidof(IDXGIDevice1), reinterpret_cast<void**>(&dxgi1))) && dxgi1)
@@ -566,7 +558,6 @@ bool Overlay::InitD3D()
     }
     m_device->CreateRenderTargetView(bb, nullptr, &m_rtv);
     bb->Release();
-
     return true;
 }
 void Overlay::CleanupD3D()
@@ -625,7 +616,6 @@ bool Overlay::InitImGui()
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
-
     io.IniFilename = nullptr;
     ImGui::StyleColorsDark();
     if (!ImGui_ImplWin32_Init(m_hwnd))
@@ -665,7 +655,6 @@ void Overlay::CleanupImGui()
 void Overlay::BeginFrame()
 {
     const float clear[4] = { 0.f, 0.f, 0.f, 0.f };
-
     m_ctx->OMSetRenderTargets(1, &m_rtv, nullptr);
     m_ctx->ClearRenderTargetView(m_rtv, clear);
 }
@@ -679,7 +668,6 @@ void Overlay::EndFrame()
     }
     else
     {
-
         HRESULT pr = m_swapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING | DXGI_PRESENT_DO_NOT_WAIT);
         if (pr == DXGI_ERROR_INVALID_CALL)
             pr = m_swapChain->Present(0, DXGI_PRESENT_DO_NOT_WAIT);
@@ -728,7 +716,6 @@ void Overlay::SetVSync(bool enabled)
 }
 void Overlay::SetStreamProof(bool enabled)
 {
-
     if (!m_hwnd || enabled == m_streamProof)
     {
         return;
@@ -737,10 +724,8 @@ void Overlay::SetStreamProof(bool enabled)
     DWORD affinity = enabled ? WDA_EXCLUDEFROMCAPTURE : 0;
     SetWindowDisplayAffinity(m_hwnd, affinity);
 }
-
 #define STB_IMAGE_IMPLEMENTATION
 #include "../../../utility/stb/stb_image.h"
-
 ID3D11ShaderResourceView* Menu::LoadIconTexture(const unsigned char* png, int len)
 {
     int tw = 0;

@@ -4,7 +4,6 @@
 #include "../../../menu/core/gui/menu.h"
 #include <Windows.h>
 #include <algorithm>
-
 namespace thenwefuckin::misc::infjump
 {
     void run()
@@ -14,23 +13,18 @@ namespace thenwefuckin::misc::infjump
         {
             active = Menu::IsMenuKeyActive("##infjump_key", settings::infjump_key, settings::infjump_key_mode);
         }
-
         if (!active)
             return;
-
         if (!g_proc || !g_proc->connected() || !g_ctx.ready)
             return;
-
         if ((GetAsyncKeyState(VK_SPACE) & 0x8000) == 0)
             return;
-
         node root = g_ctx.local_root;
         if (!root)
             return;
         uintptr_t prim = root.primitive();
         if (!prim)
             return;
-
         float jumpPower = 50.0f;
         node humanoid = g_ctx.local_humanoid;
         if (humanoid)

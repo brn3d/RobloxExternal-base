@@ -2,7 +2,6 @@
 #include "../../../menu/overlay/settings.h"
 #include "../../../menu/resources/font.h"
 #include <cmath>
-
 namespace thenwefuckin::visual::name
 {
     void draw(ImDrawList* dl, const data::rect& rc, const std::string& str)

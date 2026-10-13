@@ -1,6 +1,5 @@
 #include "distance.h"
 #include "../../../menu/overlay/settings.h"
-
 namespace thenwefuckin::aim::distance
 {
     bool check(float dist)
@@ -9,7 +8,6 @@ namespace thenwefuckin::aim::distance
             return false;
         return true;
     }
-
     bool check(const math::vec3& targetPos, const math::vec3& camPos)
     {
         if (!settings::aim_distance_check)

@@ -3,7 +3,6 @@
 #include <cmath>
 #include <algorithm>
 #include <cstdio>
-
 namespace thenwefuckin::visual::health
 {
     void draw_bar(ImDrawList* dl, float bx0, float bx1, float by0, float by1, float frac, bool outline, ImU32 outlineCol, bool gradient, bool showText, ImU32 barCol)
@@ -67,19 +66,16 @@ namespace thenwefuckin::visual::health
             dl->AddText(font, fs, ImVec2(cx, cy), IM_COL32(255,255,255,255), buf);
         }
     }
-
     void draw(ImDrawList* dl, const data::rect& rc, float hp, float maxHp, bool outline, ImU32 outlineCol, bool gradient, bool showText, ImU32 barCol, bool boxOutline, float gap)
     {
         if (!dl) return;
         float f = (maxHp > 0.01f) ? (hp / maxHp) : 1.f;
         if (!std::isfinite(f)) f = 1.f;
         f = std::clamp(f, 0.0f, 1.0f);
-
         float boxLeft = rc.x0 - (boxOutline ? 1.0f : 0.0f);
         float barRight = boxLeft - gap - (outline ? 1.0f : 0.0f);
         const float bx1 = std::floor(barRight);
         const float bx0 = bx1 - 2.0f;
-
         draw_bar(dl, bx0, bx1, rc.y0, rc.y1, f, outline, outlineCol, gradient, showText, barCol);
     }
 }

@@ -1,7 +1,6 @@
 #pragma once
 #include <string>
 #include <vector>
-
 namespace thenwefuckin::misc::hitsound
 {
     void run();

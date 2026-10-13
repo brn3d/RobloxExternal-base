@@ -3,7 +3,6 @@
 #include "../../../menu/overlay/settings.h"
 #include <cmath>
 #include <algorithm>
-
 namespace thenwefuckin::visual::oof
 {
     void draw(ImDrawList* dl, const math::vec3& worldPos, const math::view_matrix& view, int screenW, int screenH, ImU32 col, bool outline, ImU32 outlineCol, float size, float radius)
@@ -39,7 +38,6 @@ namespace thenwefuckin::visual::oof
         float s = size;
         float ca = cosf(ang), sa = sinf(ang);
         float px = -sa, py = ca;
-
         if (settings::oof_arrow_style == 1)
         {
             float H = s * 2.0f;

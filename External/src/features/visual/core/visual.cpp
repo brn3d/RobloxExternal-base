@@ -1,13 +1,13 @@
 #include "visual.h"
 #include "../../aim/core/aim.h"
 #include "../../../utility/cache/cache.h"
-#include "../world/ore.h"
-#include "../world/plants.h"
-#include "../world/bots.h"
-#include "../world/animals.h"
-#include "../world/tools.h"
-#include "../world/crates.h"
-#include "../world/keycards.h"
+#include "../world/ore/ore.h"
+#include "../world/plants/plants.h"
+#include "../world/bots/bots.h"
+#include "../world/animals/animals.h"
+#include "../world/tools/tools.h"
+#include "../world/crates/crates.h"
+#include "../world/keycards/keycards.h"
 #include "../../../menu/overlay/settings.h"
 #include "../box/box.h"
 #include "../skeleton/skeleton.h"
@@ -26,15 +26,12 @@
 #include <string>
 #include <cstdio>
 #include <cstring>
-
 static constexpr float kStaticBoxAspect = 0.72f;
 static constexpr float kStaticBoxPadY   = 5.0f;
-
 namespace thenwefuckin::visual
 {
     static std::unordered_map<uintptr_t, LimbCache> g_limb;
     static std::mutex g_limbMtx;
-
     static inline void DrawVisualText(ImDrawList* dl, ImFont* font, float fontSize, float x, float y, ImU32 col, bool outline, ImU32 outlineCol, const char* text)
     {
         if (!dl || !text || !text[0]) return;
@@ -42,7 +39,6 @@ namespace thenwefuckin::visual
         float ix = std::floor(x);
         float iy = std::floor(y);
         if (outline) {
-
             static const ImVec2 offsets[4] = {
                 ImVec2(-1.0f, -1.0f), ImVec2(1.0f, -1.0f),
                 ImVec2(-1.0f,  1.0f), ImVec2(1.0f,  1.0f)
@@ -53,102 +49,79 @@ namespace thenwefuckin::visual
         }
         dl->AddText(font, fontSize, ImVec2(ix, iy), col, text);
     }
-
     static inline uintptr_t getPrim(node c, const std::string& n)
     {
         node limb = c.find_child(n);
         if (!limb) return 0;
         return limb.primitive();
     }
-
     static inline math::vec3 getPos(uintptr_t prim)
     {
         if (!prim) return {};
         return g_proc->read<math::vec3>(prim + Offsets::Primitive::Position);
     }
-
     static inline math::frame getFrame(uintptr_t prim)
     {
         if (!prim) return {};
         return g_proc->read<math::frame>(prim + Offsets::Primitive::Rotation);
     }
-    static inline void addOrientedBox(std::vector<math::vec3>& out, const math::frame& cf, const math::vec3& root, float w, float h, float d)
+    static inline void addJoint(std::vector<math::vec3>& out, const math::vec3& p, const math::vec3& root, float rx, float ry, float rz)
     {
-        if (cf.pos.x == 0 && cf.pos.y == 0 && cf.pos.z == 0) return;
-        if ((cf.pos - root).length() > 25.0f) return;
-        math::vec3 pos = cf.pos;
-        math::vec3 r = cf.right();
-        math::vec3 u = cf.up();
-        math::vec3 l = cf.look();
-        float hw = w * 0.5f, hh = h * 0.5f, hd = d * 0.5f;
+        if (p.x == 0.0f && p.y == 0.0f && p.z == 0.0f) return;
+        if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) return;
+        if ((p - root).length() > 25.0f) return;
         for (int x = -1; x <= 1; x += 2)
             for (int y = -1; y <= 1; y += 2)
                 for (int z = -1; z <= 1; z += 2)
-                    out.push_back({ pos.x + r.x*(x*hw) + u.x*(y*hh) + l.x*(z*hd),
-                                    pos.y + r.y*(x*hw) + u.y*(y*hh) + l.y*(z*hd),
-                                    pos.z + r.z*(x*hw) + u.z*(y*hh) + l.z*(z*hd) });
+                    out.push_back({ p.x + x * rx, p.y + y * ry, p.z + z * rz });
     }
-    static inline void collectBoxPoints(const WorldCache& wc, const LimbCache& lc, std::vector<math::vec3>& pts)
+    static inline void collectBoxPoints(const WorldCache& wc, std::vector<math::vec3>& pts)
     {
         if (wc.root.x == 0 && wc.root.y == 0 && wc.root.z == 0) return;
-
-        bool isR6 = wc.isR6;
-
-        if (lc.headPrim) {
-            auto hp = getPos(lc.headPrim);
-            if (!(hp.x==0 && hp.y==0 && hp.z==0) && (hp - wc.root).length() <= 25.0f) {
-                float hs = isR6 ? 1.0f : 0.8f;
-                for (int i=0;i<8;++i){ float a=(i/8.0f)*6.2831853f; pts.push_back({hp.x+cosf(a)*hs, hp.y, hp.z+sinf(a)*hs}); }
-                pts.push_back({hp.x, hp.y+hs, hp.z});
-                pts.push_back({hp.x, hp.y - hs*0.5f, hp.z});
-            }
+        pts.reserve(128);
+        addJoint(pts, wc.root, wc.root, 1.0f, 1.0f, 0.6f);
+        if (wc.isR6)
+        {
+            addJoint(pts, wc.head, wc.root, 1.1f, 0.7f, 1.1f);
+            const math::vec3 torso = (wc.torso.x != 0.0f || wc.torso.y != 0.0f || wc.torso.z != 0.0f) ? wc.torso : wc.root;
+            addJoint(pts, torso, wc.root, 1.1f, 1.1f, 0.7f);
+            addJoint(pts, wc.leftArm, wc.root, 0.7f, 1.1f, 0.7f);
+            addJoint(pts, wc.rightArm, wc.root, 0.7f, 1.1f, 0.7f);
+            addJoint(pts, wc.leftLeg, wc.root, 0.7f, 1.1f, 0.7f);
+            addJoint(pts, wc.rightLeg, wc.root, 0.7f, 1.1f, 0.7f);
         }
-
-        if (isR6) {
-            if (lc.torsoPrim) addOrientedBox(pts, getFrame(lc.torsoPrim), wc.root, 2.0f, 2.0f, 1.0f);
-            if (lc.rightArmPrim) addOrientedBox(pts, getFrame(lc.rightArmPrim), wc.root, 1.0f, 2.0f, 1.0f);
-            if (lc.leftArmPrim) addOrientedBox(pts, getFrame(lc.leftArmPrim), wc.root, 1.0f, 2.0f, 1.0f);
-            if (lc.rightLegPrim) { auto cf=getFrame(lc.rightLegPrim);
-                if(!(cf.pos.x==0&&cf.pos.y==0&&cf.pos.z==0) && (cf.pos - wc.root).length() <= 25.0f){
-                    math::vec3 p=cf.pos; math::vec3 r=cf.right(),u=cf.up(),l=cf.look();
-                    float w=1.0f,h=2.0f,d=1.0f;
-                    for(int x=-1;x<=1;x+=2) for(int y=-1;y<=1;y+=2) for(int z=-1;z<=1;z+=2)
-                        pts.push_back({p.x+r.x*(x*w*0.5f)+u.x*(y*h*0.6f)+l.x*(z*d*0.5f), p.y+r.y*(x*w*0.5f)+u.y*(y*h*0.6f)+l.y*(z*d*0.5f), p.z+r.z*(x*w*0.5f)+u.z*(y*h*0.6f)+l.z*(z*d*0.5f)});
-                }
-            }
-            if (lc.leftLegPrim) { auto cf=getFrame(lc.leftLegPrim);
-                if(!(cf.pos.x==0&&cf.pos.y==0&&cf.pos.z==0) && (cf.pos - wc.root).length() <= 25.0f){
-                    math::vec3 p=cf.pos; math::vec3 r=cf.right(),u=cf.up(),l=cf.look();
-                    float w=1.0f,h=2.0f,d=1.0f;
-                    for(int x=-1;x<=1;x+=2) for(int y=-1;y<=1;y+=2) for(int z=-1;z<=1;z+=2)
-                        pts.push_back({p.x+r.x*(x*w*0.5f)+u.x*(y*h*0.6f)+l.x*(z*d*0.5f), p.y+r.y*(x*w*0.5f)+u.y*(y*h*0.6f)+l.y*(z*d*0.5f), p.z+r.z*(x*w*0.5f)+u.z*(y*h*0.6f)+l.z*(z*d*0.5f)});
-                }
-            }
-        } else {
-            if (lc.upperPrim) addOrientedBox(pts, getFrame(lc.upperPrim), wc.root, 1.6f, 1.5f, 0.8f);
-            else if (lc.torsoPrim) addOrientedBox(pts, getFrame(lc.torsoPrim), wc.root, 1.6f, 1.5f, 0.8f);
-            if (lc.rightHandPrim) addOrientedBox(pts, getFrame(lc.rightHandPrim), wc.root, 0.8f, 0.8f, 0.8f);
-            else if (lc.rightLowerArmPrim) addOrientedBox(pts, getFrame(lc.rightLowerArmPrim), wc.root, 0.8f, 0.8f, 0.8f);
-            if (lc.leftHandPrim) addOrientedBox(pts, getFrame(lc.leftHandPrim), wc.root, 0.8f, 0.8f, 0.8f);
-            else if (lc.leftLowerArmPrim) addOrientedBox(pts, getFrame(lc.leftLowerArmPrim), wc.root, 0.8f, 0.8f, 0.8f);
-            if (lc.rightFootPrim) addOrientedBox(pts, getFrame(lc.rightFootPrim), wc.root, 0.8f, 0.7f, 1.2f);
-            else if (lc.rightLowerLegPrim) addOrientedBox(pts, getFrame(lc.rightLowerLegPrim), wc.root, 0.8f, 0.7f, 1.2f);
-            if (lc.leftFootPrim) addOrientedBox(pts, getFrame(lc.leftFootPrim), wc.root, 0.8f, 0.7f, 1.2f);
-            else if (lc.leftLowerLegPrim) addOrientedBox(pts, getFrame(lc.leftLowerLegPrim), wc.root, 0.8f, 0.7f, 1.2f);
+        else
+        {
+            addJoint(pts, wc.head, wc.root, 0.8f, 0.7f, 0.8f);
+            const math::vec3 upper = (wc.upper.x != 0.0f || wc.upper.y != 0.0f || wc.upper.z != 0.0f) ? wc.upper : wc.torso;
+            addJoint(pts, upper, wc.root, 0.9f, 0.7f, 0.5f);
+            addJoint(pts, wc.lower, wc.root, 0.9f, 0.7f, 0.5f);
+            addJoint(pts, wc.leftUpperArm, wc.root, 0.4f, 0.5f, 0.4f);
+            addJoint(pts, wc.leftLowerArm, wc.root, 0.35f, 0.45f, 0.35f);
+            addJoint(pts, wc.leftHand, wc.root, 0.35f, 0.35f, 0.35f);
+            addJoint(pts, wc.rightUpperArm, wc.root, 0.4f, 0.5f, 0.4f);
+            addJoint(pts, wc.rightLowerArm, wc.root, 0.35f, 0.45f, 0.35f);
+            addJoint(pts, wc.rightHand, wc.root, 0.35f, 0.35f, 0.35f);
+            addJoint(pts, wc.leftUpperLeg, wc.root, 0.4f, 0.6f, 0.4f);
+            addJoint(pts, wc.leftLowerLeg, wc.root, 0.35f, 0.55f, 0.35f);
+            addJoint(pts, wc.leftFoot, wc.root, 0.35f, 0.3f, 0.5f);
+            addJoint(pts, wc.rightUpperLeg, wc.root, 0.4f, 0.6f, 0.4f);
+            addJoint(pts, wc.rightLowerLeg, wc.root, 0.35f, 0.55f, 0.35f);
+            addJoint(pts, wc.rightFoot, wc.root, 0.35f, 0.3f, 0.5f);
         }
-
     }
-
-    static inline data::rect projectBoxPoints(const std::vector<math::vec3>& pts, const math::view_matrix& view, float screenW, float screenH)
+    static inline data::rect projectBoxPoints(const std::vector<math::vec3>& pts, const math::view_matrix& view, float screenW, float screenH, const math::vec3& camPos)
     {
         if (pts.empty()) return {};
-
         float minX=1e9f, minY=1e9f, maxX=-1e9f, maxY=-1e9f;
         int valid=0;
         for (auto &p: pts) {
+
+            if ((p - camPos).length() < 1.5f) continue;
             math::vec2 s;
             if (!projection::to_screen(p, view, screenW, screenH, s)) continue;
             if (s.x==0 && s.y==0) continue;
+            if (!std::isfinite(s.x) || !std::isfinite(s.y)) continue;
             minX = (std::min)(minX, s.x);
             minY = (std::min)(minY, s.y);
             maxX = (std::max)(maxX, s.x);
@@ -157,30 +130,31 @@ namespace thenwefuckin::visual
         }
         if (valid < 3 || minX==1e9f) return {};
         float bw = maxX - minX, bh = maxY - minY;
-
-        if (bw > screenW*1.5f || bh > screenH*1.5f) return {};
-        if (bw <= 2 || bh <= 4) return {};
-        if ((bw > 10.0f && bh > bw * 6.0f) || (bh > 10.0f && bw > bh * 1.5f)) return {};
+        if (bw <= 2.0f || bh <= 4.0f) return {};
+        float pad = 1.0f + 0.03f * ((std::max)(bw, bh));
+        minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+        constexpr float m = 50.0f;
+        minX = (std::max)(minX, -m); minY = (std::max)(minY, -m);
+        maxX = (std::min)(maxX, screenW + m); maxY = (std::min)(maxY, screenH + m);
+        if (minX >= maxX || minY >= maxY) return {};
         data::rect rc{}; rc.x0=minX; rc.y0=minY; rc.x1=maxX; rc.y1=maxY;
         return rc;
     }
-
     static std::vector<WorldCache> g_world;
     static std::chrono::steady_clock::time_point g_last;
-
     static math::view_matrix g_viewCache{};
     static bool g_viewValid = false;
 
+    struct DynRectState { data::rect rc; std::chrono::steady_clock::time_point t{}; };
+    static std::unordered_map<uintptr_t, DynRectState> s_dynRect;
     static std::unordered_map<uintptr_t, std::string> g_nameCache;
     static std::mutex g_nameMtx;
-
     static inline math::view_matrix fetchView()
     {
         uint64_t vis = g_proc->read<uint64_t>(g_proc->base() + Offsets::VisualEngine::Pointer);
         if (!vis) return g_ctx.view;
         return g_proc->read<math::view_matrix>(vis + Offsets::VisualEngine::ViewMatrix);
     }
-
     static void build_pf_world(std::vector<WorldCache>& out, float fw, float fh)
     {
         out.clear();
@@ -189,7 +163,6 @@ namespace thenwefuckin::visual
         bool needSkel = settings::skeleton_enabled;
         bool need3d = (settings::box_mode == 1);
         bool needLimbs = needSkel || need3d;
-
         static std::unordered_map<uintptr_t, std::string> s_teamNames;
         for (auto& pp : PfCache::players)
         {
@@ -203,7 +176,6 @@ namespace thenwefuckin::visual
                 continue;
             WorldCache wc{};
             wc.playerAddr = pp.modelAddr;
-
             node headNode{ pp.headAddr };
             node torsoNode{ pp.torsoAddr };
             uintptr_t headPrim = headNode ? headNode.primitive() : 0;
@@ -216,7 +188,6 @@ namespace thenwefuckin::visual
             wc.root = torsoPrim ? getPos(torsoPrim) : math::vec3{};
             if ((wc.root.x == 0 && wc.root.y == 0 && wc.root.z == 0) || (wc.head - wc.root).length() > 25.0f)
                 wc.root = math::vec3{ wc.head.x, wc.head.y - 2.5f, wc.head.z };
-
             wc.hp = pp.health * 100.0f;
             wc.maxHp = 100.0f;
             wc.name = pp.name;
@@ -232,17 +203,14 @@ namespace thenwefuckin::visual
                     s_teamNames[pp.teamFolderAddr] = wc.team;
                 }
             }
-
             wc.valid = true;
             wc.isR6 = true;
-
             LimbCache lc{};
             lc.characterAddr = pp.modelAddr;
             lc.isR6 = true;
             lc.headPrim = headPrim;
             lc.rootPrim = torsoPrim ? torsoPrim : headPrim;
             lc.torsoPrim = torsoPrim;
-
             auto safePos = [&](uintptr_t prim, float maxDist) -> math::vec3 {
                 if (!prim) return {};
                 math::vec3 p = getPos(prim);
@@ -250,7 +218,6 @@ namespace thenwefuckin::visual
                 if ((p - wc.root).length() > maxDist) return {};
                 return p;
             };
-
             if (needLimbs)
             {
                 std::vector<uintptr_t> lprims;
@@ -284,7 +251,7 @@ namespace thenwefuckin::visual
             {
                 std::vector<math::vec3> pts;
                 pts.reserve(200);
-                collectBoxPoints(wc, lc, pts);
+                collectBoxPoints(wc, pts);
                 if (!pts.empty())
                 {
                     wc.pts3d = std::move(pts);
@@ -294,15 +261,19 @@ namespace thenwefuckin::visual
             out.push_back(std::move(wc));
         }
     }
-
     void on_game_joined()
     {
-
         std::lock_guard<std::mutex> lk(g_limbMtx);
         g_limb.clear();
         std::lock_guard<std::mutex> nlk(g_nameMtx);
         g_nameCache.clear();
         pcache::clear();
+        PfCache::on_game_joined();
+        g_world.clear();
+        g_last = std::chrono::steady_clock::time_point{};
+        g_viewCache = math::view_matrix{};
+        g_viewValid = false;
+        thenwefuckin::aim::on_game_joined();
         ore::clear();
         plants::clear();
         bots::clear();
@@ -311,29 +282,41 @@ namespace thenwefuckin::visual
         crates::clear();
         keycards::clear();
     }
-
     void render(ImDrawList* dl, int w, int h)
     {
         if (!dl) return;
-
         if (settings::aim_show_fov && settings::aim_fov > 0.0f)
         {
             float cx = (float)w * 0.5f;
             float cy = (float)h * 0.5f;
             float r = settings::aim_fov;
-
             if (settings::aim_fov_fill) {
                 ImU32 fc = ImGui::ColorConvertFloat4ToU32(ImVec4(settings::aim_fov_fill_color[0], settings::aim_fov_fill_color[1], settings::aim_fov_fill_color[2], settings::aim_fov_fill_color[3]));
-                dl->AddCircleFilled(ImVec2(cx, cy), r, fc, 64);
+                int style = settings::aim_fov_style;
+                if (style == 2)
+                    dl->AddRectFilled(ImVec2(cx - r, cy - r), ImVec2(cx + r, cy + r), fc);
+                else if (style == 3)
+                {
+                    ImVec2 hex[6];
+                    for (int i = 0; i < 6; ++i)
+                    {
+                        float a = 6.2831853f * (float)i / 6.0f - 1.5707963f;
+                        hex[i] = ImVec2(cx + cosf(a) * r, cy + sinf(a) * r);
+                    }
+                    dl->AddConvexPolyFilled(hex, 6, fc);
+                }
+                else if (style == 4)
+                    dl->AddQuadFilled(ImVec2(cx, cy - r), ImVec2(cx + r, cy), ImVec2(cx, cy + r), ImVec2(cx - r, cy), fc);
+                else
+                    dl->AddCircleFilled(ImVec2(cx, cy), r, fc, 64);
             }
             ImU32 mc = ImGui::ColorConvertFloat4ToU32(ImVec4(settings::aim_fov_color[0], settings::aim_fov_color[1], settings::aim_fov_color[2], settings::aim_fov_color[3]));
+            ImU32 oc = ImGui::ColorConvertFloat4ToU32(ImVec4(settings::aim_fov_outline_color[0], settings::aim_fov_outline_color[1], settings::aim_fov_outline_color[2], settings::aim_fov_outline_color[3]));
             if (settings::aim_fov_style == 1)
             {
-
                 int n = (int)(r * 0.9f);
                 if (n < 12) n = 12;
                 if (n > 64) n = 64;
-                ImU32 oc = ImGui::ColorConvertFloat4ToU32(ImVec4(settings::aim_fov_outline_color[0], settings::aim_fov_outline_color[1], settings::aim_fov_outline_color[2], settings::aim_fov_outline_color[3]));
                 for (int i = 0; i < n; ++i)
                 {
                     float a = (float)i * 6.2831853f / (float)n;
@@ -343,31 +326,52 @@ namespace thenwefuckin::visual
                     dl->AddCircleFilled(p, 1.5f, mc);
                 }
             }
+            else if (settings::aim_fov_style == 2)
+            {
+                if (settings::aim_fov_outline) {
+                    dl->AddRect(ImVec2(cx - r - 1.0f, cy - r - 1.0f), ImVec2(cx + r + 1.0f, cy + r + 1.0f), oc);
+                    dl->AddRect(ImVec2(cx - r + 1.0f, cy - r + 1.0f), ImVec2(cx + r - 1.0f, cy + r - 1.0f), oc);
+                }
+                dl->AddRect(ImVec2(cx - r, cy - r), ImVec2(cx + r, cy + r), mc);
+            }
+            else if (settings::aim_fov_style == 3)
+            {
+                ImVec2 hex[6];
+                for (int i = 0; i < 6; ++i)
+                {
+                    float a = 6.2831853f * (float)i / 6.0f - 1.5707963f;
+                    hex[i] = ImVec2(cx + cosf(a) * r, cy + sinf(a) * r);
+                }
+                if (settings::aim_fov_outline)
+                    dl->AddPolyline(hex, 6, oc, 2.0f, ImDrawFlags_Closed);
+                dl->AddPolyline(hex, 6, mc, 1.0f, ImDrawFlags_Closed);
+            }
+            else if (settings::aim_fov_style == 4)
+            {
+                ImVec2 dia[4] = { ImVec2(cx, cy - r), ImVec2(cx + r, cy), ImVec2(cx, cy + r), ImVec2(cx - r, cy) };
+                if (settings::aim_fov_outline)
+                    dl->AddPolyline(dia, 4, oc, 2.0f, ImDrawFlags_Closed);
+                dl->AddPolyline(dia, 4, mc, 1.0f, ImDrawFlags_Closed);
+            }
             else
             {
                 if (settings::aim_fov_outline) {
-                    ImU32 oc = ImGui::ColorConvertFloat4ToU32(ImVec4(settings::aim_fov_outline_color[0], settings::aim_fov_outline_color[1], settings::aim_fov_outline_color[2], settings::aim_fov_outline_color[3]));
                     dl->AddCircle(ImVec2(cx, cy), r - 1.0f, oc, 64, 1.0f);
                     dl->AddCircle(ImVec2(cx, cy), r + 1.0f, oc, 64, 1.0f);
                 }
                 dl->AddCircle(ImVec2(cx, cy), r, mc, 64, 1.0f);
             }
         }
-
         if (!g_ctx.ready) return;
         bool any_flags = settings::flags_enabled && (settings::flags_team || settings::flags_state || settings::flags_health);
-        if (!settings::box_enabled && !settings::skeleton_enabled && !settings::health_enabled && !settings::name_enabled && !settings::headdot_enabled && !settings::distance_enabled && !settings::tool_enabled && !any_flags && !settings::tracer_enabled && !settings::oof_enabled && !settings::aim_tracer) return;
-
+        if (!settings::box_enabled && !settings::skeleton_enabled && !settings::health_enabled && !settings::name_enabled && !settings::headdot_enabled && !settings::distance_enabled && !settings::tool_enabled && !any_flags && !settings::tracer_enabled && !settings::oof_enabled && !settings::aim_tracer && !settings::aim_enabled && !settings::aim_autoshoot) return;
         float fw = (float)w;
         float fh = (float)h;
-
         auto now = std::chrono::steady_clock::now();
         bool need = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_last).count() > 33;
-
         bool needSkel = settings::skeleton_enabled;
         bool need3dBox = (settings::box_mode == 1);
         bool needFullLimbs = needSkel || need3dBox;
-
         static bool s_pfMode = false;
         static std::chrono::steady_clock::time_point s_pfCheck{};
         if (now - s_pfCheck > std::chrono::milliseconds(2000))
@@ -375,13 +379,11 @@ namespace thenwefuckin::visual
             s_pfCheck = now;
             s_pfMode = PfCache::IsActivePlace();
         }
-
         if (g_proc && g_proc->connected())
         {
             g_viewCache = fetchView();
             g_viewValid = true;
         }
-
         if (need)
         {
             uintptr_t localTeamAddr = 0;
@@ -401,39 +403,30 @@ namespace thenwefuckin::visual
                 snapshot = pcache::entries;
             }
             next.reserve(snapshot.size());
-
             for (auto& pe : snapshot)
             {
                 WorldCache wc{};
                 wc.playerAddr = pe.player;
                 if (pe.player == g_ctx.local_player.addr) { next.push_back(std::move(wc)); continue; }
-
                 if (settings::vis_team_check && localTeamAddr && pe.team && pe.team == localTeamAddr) { next.push_back(std::move(wc)); continue; }
-
                 if (pe.hp <= 0.f) { next.push_back(std::move(wc)); continue; }
                 wc.hp = pe.hp;
                 wc.maxHp = pe.maxHp > 0 ? pe.maxHp : 100.f;
-
                 wc.name = pe.name;
                 if (settings::tool_enabled)
                     wc.tool = pe.tool;
                 if (settings::flags_enabled && settings::flags_team)
                     wc.team = pe.teamStr;
-
                 LimbCache lc = pe.lc;
-
                 if (lc.headPrim == 0) { next.push_back(std::move(wc)); continue; }
-
                 wc.head = getPos(lc.headPrim);
                 if (wc.head.x == 0 && wc.head.y == 0 && wc.head.z == 0) { next.push_back(wc); continue; }
-
                 wc.root = lc.rootPrim ? getPos(lc.rootPrim) : math::vec3{};
                 float drop = lc.isR6 ? 3.0f : 2.5f;
                 if ((wc.root.x == 0 && wc.root.y == 0 && wc.root.z == 0) || (wc.head - wc.root).length() > 25.0f)
                 {
                     wc.root = math::vec3{ wc.head.x, wc.head.y - drop, wc.head.z };
                 }
-
                 if (settings::flags_enabled && settings::flags_state && pe.humanoid)
                 {
                     uintptr_t seat = g_proc->read<uintptr_t>(pe.humanoid + Offsets::Humanoid::SeatPart);
@@ -456,10 +449,8 @@ namespace thenwefuckin::visual
                             wc.state = "Standing";
                     }
                 }
-
                 wc.valid = true;
                 wc.isR6 = lc.isR6;
-
                 auto safePos = [&](uintptr_t prim, float maxDist) -> math::vec3 {
                     if (!prim) return {};
                     math::vec3 p = getPos(prim);
@@ -467,7 +458,6 @@ namespace thenwefuckin::visual
                     if ((p - wc.root).length() > maxDist) return {};
                     return p;
                 };
-
                 if (lc.isR6)
                 {
                     wc.torso = safePos(lc.torsoPrim, 15.0f);
@@ -495,7 +485,6 @@ namespace thenwefuckin::visual
                     wc.rightFoot = safePos(lc.rightFootPrim, 25.0f);
                     wc.torso = wc.upper;
                 }
-
                 wc.lc = lc;
                 if (needSkel && lc.isR6 && lc.torsoPrim)
                 {
@@ -510,20 +499,17 @@ namespace thenwefuckin::visual
                 {
                     std::vector<math::vec3> pts;
                     pts.reserve(200);
-                    collectBoxPoints(wc, lc, pts);
+                    collectBoxPoints(wc, pts);
                     if (!pts.empty()) { wc.pts3d = std::move(pts); wc.hasPts3d = true; }
                 }
                 next.push_back(std::move(wc));
             }
             }
-
             g_world.swap(next);
             g_last = now;
         }
-
         if (!g_viewValid) return;
         const math::view_matrix& view = g_viewCache;
-
         ImU32 boxCol = 0, boxOutlineCol = 0, boxFill1 = 0, boxFill2 = 0;
         if (settings::box_enabled)
         {
@@ -542,31 +528,91 @@ namespace thenwefuckin::visual
             skelOutlineCol = ImGui::ColorConvertFloat4ToU32(ImVec4(settings::skeleton_outline_color[0], settings::skeleton_outline_color[1], settings::skeleton_outline_color[2], 1.0f));
         }
         ImFont* verdana = g_verdanaFont ? g_verdanaFont : ImGui::GetFont();
+        math::vec3 camPos{};
+        if (g_ctx.camera)
+            camPos = g_proc->read<math::vec3>(g_ctx.camera.addr + Offsets::Camera::Position);
 
+        {
+            static math::vec3 s_prevCamFwd{};
+            static bool s_havePrevCamFwd = false;
+            math::vec3 fwd{};
+            if (g_ctx.camera)
+            {
+                math::frame cf = g_proc->read<math::frame>(g_ctx.camera.addr + Offsets::Camera::Rotation);
+                fwd = math::vec3{ -cf.rot[2], -cf.rot[5], -cf.rot[8] };
+                float fl = fwd.length();
+                if (fl > 0.000001f)
+                    fwd = fwd / fl;
+                else
+                    fwd = math::vec3{};
+            }
+            if (fwd.x != 0.0f || fwd.y != 0.0f || fwd.z != 0.0f)
+            {
+                if (s_havePrevCamFwd)
+                {
+                    float d = s_prevCamFwd.dot(fwd);
+                    if (d < 0.996f)
+                        s_dynRect.clear();
+                }
+                s_prevCamFwd = fwd;
+                s_havePrevCamFwd = true;
+            }
+            else
+            {
+                s_havePrevCamFwd = false;
+            }
+        }
+
+        if (s_dynRect.size() > 64)
+        {
+            for (auto it = s_dynRect.begin(); it != s_dynRect.end();)
+            {
+                if (now - it->second.t > std::chrono::seconds(5))
+                    it = s_dynRect.erase(it);
+                else
+                    ++it;
+            }
+        }
         for (auto& wc : g_world)
         {
             if (!wc.valid) continue;
-
             data::rect rc{};
             if (thenwefuckin::settings::box_mode == 1 && wc.hasPts3d && !wc.pts3d.empty()) {
-                rc = projectBoxPoints(wc.pts3d, view, fw, fh);
+                data::rect dyn = projectBoxPoints(wc.pts3d, view, fw, fh, camPos);
+                auto dit = s_dynRect.find(wc.playerAddr);
+                bool havePrev = (dit != s_dynRect.end()) &&
+                    (now - dit->second.t < std::chrono::milliseconds(250)) &&
+                    !dit->second.rc.empty();
+                if (!dyn.empty()) {
+                    if (havePrev) {
+
+                        const data::rect& pr = dit->second.rc;
+                        rc.x0 = pr.x0 + (dyn.x0 - pr.x0) * 0.8f;
+                        rc.y0 = pr.y0 + (dyn.y0 - pr.y0) * 0.8f;
+                        rc.x1 = pr.x1 + (dyn.x1 - pr.x1) * 0.8f;
+                        rc.y1 = pr.y1 + (dyn.y1 - pr.y1) * 0.8f;
+                        if (rc.empty()) rc = dyn;
+                    } else {
+                        rc = dyn;
+                    }
+                    s_dynRect[wc.playerAddr] = DynRectState{ rc, now };
+                } else if (havePrev) {
+
+                    rc = dit->second.rc;
+                }
             }
             if (rc.empty()) {
-                math::vec3 top3{ wc.head.x, wc.head.y + 0.5f, wc.head.z };
+
+                if ((wc.head - camPos).length() < 2.5f || (wc.root - camPos).length() < 2.5f)
+                    continue;
+                math::vec3 top3{ wc.head.x, wc.head.y + 0.6f, wc.head.z };
                 float drop = wc.isR6 ? 3.0f : 2.5f;
                 math::vec3 bot3{ wc.root.x, wc.root.y - drop, wc.root.z };
                 math::vec2 top{};
                 math::vec2 bot{};
                 bool a = projection::to_screen(top3, view, fw, fh, top);
                 bool b = projection::to_screen(bot3, view, fw, fh, bot);
-                if (!a && !b) continue;
-                if (a && !b) {
-                    bot.x = top.x;
-                    bot.y = top.y + 4.0f;
-                } else if (!a && b) {
-                    top.x = bot.x;
-                    top.y = bot.y - 4.0f;
-                }
+                if (!a || !b) continue;
                 float hh = fabsf(bot.y - top.y) + kStaticBoxPadY * 2.0f;
                 if (hh < 4.0f) hh = 4.0f;
                 float ww = (std::max)(hh * kStaticBoxAspect, 3.0f);
@@ -577,22 +623,26 @@ namespace thenwefuckin::visual
                 rc.y0 = minY;
                 rc.y1 = minY + hh;
             }
-
             rc.x0 = std::floor(rc.x0);
             rc.x1 = std::floor(rc.x1);
             rc.y0 = std::floor(rc.y0);
             rc.y1 = std::floor(rc.y1);
 
-            if (rc.x1 < -50.0f || rc.x0 > fw + 50.0f || rc.y1 < -50.0f || rc.y0 > fh + 50.0f)
-                continue;
-
+            {
+                float ccx = (rc.x0 + rc.x1) * 0.5f;
+                float ccy = (rc.y0 + rc.y1) * 0.5f;
+                if (ccx < -12.0f || ccx > fw + 12.0f || ccy < -12.0f || ccy > fh + 12.0f)
+                    continue;
+            }
             float studsDist = (wc.root - g_ctx.local_pos).length();
             if (studsDist < 0.1f) studsDist = (wc.head - g_ctx.local_pos).length();
             float metersDist = studsDist * 0.28f;
-
             float distScale = std::clamp(18.0f / (studsDist + 8.0f) + 0.55f, 0.55f, 1.45f);
 
-            if (settings::box_enabled)
+            float rcW = rc.x1 - rc.x0;
+            float rcH = rc.y1 - rc.y0;
+            bool oversize = (rcW > fw * 0.85f || rcH > fh * 0.85f);
+            if (settings::box_enabled && !oversize)
             {
                 if (settings::box_filled) {
                     if (settings::box_fill_gradient) {
@@ -612,7 +662,6 @@ namespace thenwefuckin::visual
                 ImU32 hcol = ImGui::ColorConvertFloat4ToU32(ImVec4(settings::health_color[0], settings::health_color[1], settings::health_color[2], 1.0f));
                 health::draw(dl, rc, wc.hp, wc.maxHp, settings::health_outline, hoc, settings::health_gradient, settings::health_text, hcol, settings::box_enabled && settings::box_outline, 1.0f);
             }
-
             if (settings::name_enabled && !wc.name.empty())
             {
                 ImU32 nameCol = ImGui::ColorConvertFloat4ToU32(ImVec4(settings::name_color[0], settings::name_color[1], settings::name_color[2], 1.0f));
@@ -623,7 +672,6 @@ namespace thenwefuckin::visual
                 float ty = rc.y0 - ts.y - 3.0f;
                 DrawVisualText(dl, verdana, fontSize, tx, ty, nameCol, settings::name_outline, nameOutlineCol, wc.name.c_str());
             }
-
             if (settings::skeleton_enabled)
             {
                 const float baseThick = 1.5f * distScale;
@@ -679,9 +727,7 @@ namespace thenwefuckin::visual
                     for (int i=0;i<out.count;++i) dl->AddLine(ImVec2(out.items[i].a.x,out.items[i].a.y), ImVec2(out.items[i].b.x,out.items[i].b.y), skelCol, baseThick);
                 }
             }
-
             headdot::draw(dl, wc.head, view, fw, fh, distScale);
-
             float distY = rc.y1 + 2.0f;
             ImVec2 distTs{};
             if (settings::distance_enabled)
@@ -773,7 +819,6 @@ namespace thenwefuckin::visual
                 }
             }
         }
-
         if (settings::aim_tracer)
         {
             math::vec3 aw{};

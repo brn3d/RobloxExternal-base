@@ -2,7 +2,6 @@
 #include "../../../menu/overlay/settings.h"
 #include <algorithm>
 #include <cmath>
-
 namespace thenwefuckin::aim::smooth
 {
     void calculate(float curYaw, float curPitch, float wantYaw, float wantPitch, float& outYaw, float& outPitch)
@@ -10,9 +9,7 @@ namespace thenwefuckin::aim::smooth
         float deltaYaw = wantYaw - curYaw;
         while (deltaYaw > 3.14159265f) deltaYaw -= 6.2831853f;
         while (deltaYaw < -3.14159265f) deltaYaw += 6.2831853f;
-
         float deltaPitch = wantPitch - curPitch;
-
         float kx = 1.0f;
         float ky = 1.0f;
         if (settings::aim_smoothing_enabled)
@@ -26,10 +23,8 @@ namespace thenwefuckin::aim::smooth
             if (kx > 1.0f) kx = 1.0f;
             if (ky > 1.0f) ky = 1.0f;
         }
-
         outYaw = curYaw + deltaYaw * kx;
         outPitch = curPitch + deltaPitch * ky;
-
         if (outPitch > 1.55f) outPitch = 1.55f;
         if (outPitch < -1.55f) outPitch = -1.55f;
     }

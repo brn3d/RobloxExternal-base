@@ -26,9 +26,7 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
-
 #pragma comment(lib, "wininet.lib")
-
 namespace thenwefuckin::visual::preview
 {
     namespace
@@ -42,7 +40,6 @@ namespace thenwefuckin::visual::preview
         constexpr UINT kRtSize = 512;
         constexpr size_t kMaxTextureBytes = 8ull << 20;
         constexpr size_t kMaxVerts = 200000;
-
         struct Jdom
         {
             enum class Type { Nul, Bool, Num, Str, Arr, Obj };
@@ -52,7 +49,6 @@ namespace thenwefuckin::visual::preview
             std::string str;
             std::vector<Jdom> arr;
             std::map<std::string, Jdom> obj;
-
             bool is_obj() const { return type == Type::Obj; }
             bool is_arr() const { return type == Type::Arr; }
             bool is_str() const { return type == Type::Str; }
@@ -75,15 +71,12 @@ namespace thenwefuckin::visual::preview
                 return dflt;
             }
         };
-
         struct JParser
         {
             const char* p;
             const char* end;
             bool fail = false;
-
             JParser(const std::string& s) : p(s.data()), end(s.data() + s.size()) {}
-
             void ws()
             {
                 while (p < end && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) ++p;
@@ -198,7 +191,6 @@ namespace thenwefuckin::visual::preview
                 return v;
             }
         };
-
         struct Http
         {
             static void arm(HINTERNET s)
@@ -251,7 +243,6 @@ namespace thenwefuckin::visual::preview
                     hdrs += std::string("x-api-key: ") + kBackendKey + "\r\n";
                     if (!jar.empty()) hdrs += "Cookie: " + jar + "\r\n";
                 }
-
                 hdrs += "Accept-Encoding: identity\r\n";
                 auto open = [&](DWORD flags) {
                     return InternetOpenUrlA(s, url.c_str(),
@@ -288,10 +279,8 @@ namespace thenwefuckin::visual::preview
                 return out;
             }
         };
-
         struct FaceRef { int p = 0; int t = 0; int n = 0; };
         enum class Phase { Calm, Fetch, Wait, Pull, Bake, Paint, Done, Broke };
-
         std::string rewrite_mtl(const std::string& src, const std::vector<std::pair<std::string, std::string>>& texs)
         {
             std::unordered_map<std::string, std::string> link;
@@ -322,7 +311,6 @@ namespace thenwefuckin::visual::preview
             }
             return out.str();
         }
-
         std::map<std::string, Surface> read_mtl(const std::string& src)
         {
             std::map<std::string, Surface> out;
@@ -340,7 +328,6 @@ namespace thenwefuckin::visual::preview
             }
             return out;
         }
-
         inline int parse_idx_safe(const char* b, const char* e) noexcept
         {
             if (!b || b >= e) return 0;
@@ -353,7 +340,6 @@ namespace thenwefuckin::visual::preview
             if (!any) return 0;
             return neg ? (int)-v : (int)v;
         }
-
         inline bool try_gunzip_inplace(std::string& data) noexcept
         {
             size_t n = data.size();
@@ -392,7 +378,6 @@ namespace thenwefuckin::visual::preview
             free(out);
             return true;
         }
-
         inline std::string describe_head(const std::string& body, size_t maxChars = 72)
         {
             size_t i = 0;
@@ -420,7 +405,6 @@ namespace thenwefuckin::visual::preview
             if (head.empty()) return "binary";
             return "'" + head + "'";
         }
-
         FaceRef split_face(const std::string& tok) noexcept
         {
             FaceRef f;
@@ -437,7 +421,6 @@ namespace thenwefuckin::visual::preview
             if (s2 + 1 < e) f.n = parse_idx_safe(s2 + 1, e);
             return f;
         }
-
         std::vector<BakedMesh> read_obj(const std::string& srcIn, size_t& vCount, size_t& fCount, size_t* outLines = nullptr, std::string* outFirstOp = nullptr)
         {
             vCount = 0;
@@ -450,7 +433,6 @@ namespace thenwefuckin::visual::preview
             std::map<std::string, BakedMesh> groups;
             std::map<std::string, std::map<std::string, uint32_t>> seen;
             std::string tag = "Default";
-
             std::string src;
             src.reserve(srcIn.size());
             size_t off = 0;
@@ -468,7 +450,6 @@ namespace thenwefuckin::visual::preview
                 src.push_back(c);
             }
             (void)utf16ish;
-
             std::istringstream in(src);
             std::string ln;
             size_t lines = 0;
@@ -554,7 +535,6 @@ namespace thenwefuckin::visual::preview
                 if (!kv.second.verts.empty()) out.push_back(std::move(kv.second));
             return out;
         }
-
         DecodedTex decode_bytes(const std::string& bytes)
         {
             DecodedTex t;
@@ -571,7 +551,6 @@ namespace thenwefuckin::visual::preview
             stbi_image_free(px);
             return t;
         }
-
         ID3D11ShaderResourceView* make_texture(ID3D11Device* dev, const DecodedTex& t)
         {
             if (t.px.empty() || t.w <= 0 || t.h <= 0) return nullptr;
@@ -593,7 +572,6 @@ namespace thenwefuckin::visual::preview
             tex->Release();
             return srv;
         }
-
         static const char* kShaders = R"(
 cbuffer Frame : register(b0)
 {
@@ -626,7 +604,6 @@ float4 PS(Pin i) : SV_Target
     return float4(col.rgb * glow, col.a);
 }
 )";
-
         struct State
         {
             std::string jar;
@@ -641,12 +618,10 @@ float4 PS(Pin i) : SV_Target
             std::atomic<bool> thumbPending{ false };
             ID3D11ShaderResourceView* thumbSrv = nullptr;
             int thumbW = 0, thumbH = 0;
-
             std::vector<LiveMesh> meshes;
             std::map<std::string, ID3D11ShaderResourceView*> images;
             std::map<std::string, Surface> surfaces;
             std::map<std::string, V3> partCenters;
-
             ID3D11VertexShader* vs = nullptr;
             ID3D11PixelShader* ps = nullptr;
             ID3D11InputLayout* layout = nullptr;
@@ -665,22 +640,18 @@ float4 PS(Pin i) : SV_Target
             int gfxRetryCd = 0;
             bool needFit = true;
             float fittedW = 0.0f, fittedH = 0.0f;
-
             float dist = 15.0f, yaw = 0.0f, pitch = 1.5f, fov = 70.0f;
             float homeYaw = 0.0f, homePitch = 1.5f;
             V3 focus{ 0, 0, 0 };
             V3 bbMin{ -5, -5, -5 }, bbMax{ 5, 5, 5 };
             bool spin = false;
             double lastTouch = -10.0;
-
             std::atomic<bool> busy{ false };
             int64_t pulledUid = 0;
             double lastTry = -100.0;
         };
         inline State s;
-
         constexpr int64_t kPreviewUid = 7846506923LL;
-
         bool compile_shaders(ID3D11Device* dev)
         {
             ID3DBlob* vsb = nullptr;
@@ -747,7 +718,6 @@ float4 PS(Pin i) : SV_Target
             if (FAILED(dev->CreateDepthStencilView(s.zb, nullptr, &s.dsv))) return false;
             return true;
         }
-
         void commit_meshes(ID3D11Device* dev)
         {
             if (s.thumbPending.load(std::memory_order_acquire))
@@ -769,7 +739,6 @@ float4 PS(Pin i) : SV_Target
                     s.thumbPending.store(false, std::memory_order_release);
                 }
             }
-
             if (!s.pending.load(std::memory_order_acquire)) return;
             std::lock_guard<std::mutex> l(s.gate);
             if (!s.pending.load(std::memory_order_relaxed)) return;
@@ -812,7 +781,6 @@ float4 PS(Pin i) : SV_Target
                     mm.vb->Release();
                     continue;
                 }
-
                 {
                     auto sit = s.surfaces.find(src.tag);
                     if (sit != s.surfaces.end())
@@ -868,7 +836,6 @@ float4 PS(Pin i) : SV_Target
             s.note = "Avatar is on screen.";
             s.needFit = true;
         }
-
         bool fetch_live_thumb(const std::string& uid, DecodedTex& out)
         {
             out = DecodedTex{};
@@ -902,7 +869,6 @@ float4 PS(Pin i) : SV_Target
             }
             return false;
         }
-
         bool use_live_thumb_fallback(const std::string& uid, const std::string& diag)
         {
             s.phase = Phase::Fetch;
@@ -925,7 +891,6 @@ float4 PS(Pin i) : SV_Target
             s.busy = false;
             return true;
         }
-
         void worker_fetch(std::string uid)
         {
             {
@@ -1117,11 +1082,9 @@ float4 PS(Pin i) : SV_Target
             };
             std::string obj = std::move(objR.body);
             std::string mtl = std::move(mtlR.body);
-
             bool objWasGzip = try_gunzip_inplace(obj);
             bool mtlWasGzip = try_gunzip_inplace(mtl);
             (void)objWasGzip; (void)mtlWasGzip;
-
             for (char& c : mtl) if (c == '\r') c = '\n';
             if ((objR.code != 200 && objR.code != 0) || (mtlR.code != 200 && mtlR.code != 0) ||
                 obj.empty() || mtl.empty() || obj.size() > (kMaxTextureBytes + 65536) ||
@@ -1243,7 +1206,6 @@ float4 PS(Pin i) : SV_Target
             }
             s.busy = false;
         }
-
         void pull_uid(const std::string& uid)
         {
             if (uid.empty() || s.busy) return;
@@ -1257,7 +1219,6 @@ float4 PS(Pin i) : SV_Target
                 s.busy = false;
             }
         }
-
         bool ensure_rt(ID3D11Device* dev, UINT w, UINT h)
         {
             if (w < 64) w = 64;
@@ -1296,7 +1257,6 @@ float4 PS(Pin i) : SV_Target
             s.rtH = h;
             return true;
         }
-
         static inline void DrawPreviewText(ImDrawList* dl, ImFont* font, float fontSize, float x, float y, ImU32 col, bool outline, ImU32 outlineCol, const char* text)
         {
             if (!dl || !text || !text[0]) return;
@@ -1315,7 +1275,6 @@ float4 PS(Pin i) : SV_Target
             }
             dl->AddText(font, fontSize, ImVec2(ix, iy), col, text);
         }
-
         static void render_esp_visuals(
             ImDrawList* dl,
             const thenwefuckin::data::rect& rc,
@@ -1325,7 +1284,6 @@ float4 PS(Pin i) : SV_Target
             bool hasBones)
         {
             if (!dl) return;
-
             float animHp = 100.0f;
             if (Menu::g_previewAnimateHp)
             {
@@ -1353,7 +1311,6 @@ float4 PS(Pin i) : SV_Target
                 }
                 animHp = std::clamp(norm * 100.0f, 1.0f, 100.0f);
             }
-
             if (thenwefuckin::settings::skeleton_enabled && hasBones)
             {
                 ImU32 skelCol = ImGui::ColorConvertFloat4ToU32(ImVec4(thenwefuckin::settings::skeleton_color[0], thenwefuckin::settings::skeleton_color[1], thenwefuckin::settings::skeleton_color[2], 1.0f));
@@ -1367,7 +1324,6 @@ float4 PS(Pin i) : SV_Target
                     dl->AddLine(b.first, b.second, skelCol, baseThick);
                 }
             }
-
             if (thenwefuckin::settings::headdot_enabled && hasHead)
             {
                 const float r = (std::max)(thenwefuckin::settings::headdot_thickness, 2.0f);
@@ -1384,7 +1340,6 @@ float4 PS(Pin i) : SV_Target
                     dl->AddCircle(headPt, r, hoc, 0, 1.5f);
                 }
             }
-
             if (thenwefuckin::settings::box_enabled)
             {
                 if (thenwefuckin::settings::box_filled)
@@ -1412,14 +1367,12 @@ float4 PS(Pin i) : SV_Target
                     thenwefuckin::visual::box::draw(dl, rc.x0, rc.y0, rc.x1, rc.y1, boxCol, thenwefuckin::settings::box_outline, boxOutlineCol);
                 }
             }
-
             if (thenwefuckin::settings::health_enabled)
             {
                 ImU32 hoc = ImGui::ColorConvertFloat4ToU32(ImVec4(thenwefuckin::settings::health_outline_color[0], thenwefuckin::settings::health_outline_color[1], thenwefuckin::settings::health_outline_color[2], 1.0f));
                 ImU32 hcol = ImGui::ColorConvertFloat4ToU32(ImVec4(thenwefuckin::settings::health_color[0], thenwefuckin::settings::health_color[1], thenwefuckin::settings::health_color[2], 1.0f));
                 thenwefuckin::visual::health::draw(dl, rc, animHp, 100.0f, thenwefuckin::settings::health_outline, hoc, thenwefuckin::settings::health_gradient, thenwefuckin::settings::health_text, hcol, thenwefuckin::settings::box_enabled && thenwefuckin::settings::box_outline, 1.0f);
             }
-
             if (thenwefuckin::settings::name_enabled)
             {
                 ImU32 nameCol = ImGui::ColorConvertFloat4ToU32(ImVec4(thenwefuckin::settings::name_color[0], thenwefuckin::settings::name_color[1], thenwefuckin::settings::name_color[2], 1.0f));
@@ -1434,7 +1387,6 @@ float4 PS(Pin i) : SV_Target
                 float ty = rc.y0 - ts.y - 3.0f;
                 DrawPreviewText(dl, font, fontSize, tx, ty, nameCol, thenwefuckin::settings::name_outline, nameOutlineCol, nameStr.c_str());
             }
-
             float distY = rc.y1 + 2.0f;
             if (thenwefuckin::settings::distance_enabled)
             {
@@ -1471,7 +1423,6 @@ float4 PS(Pin i) : SV_Target
                 DrawPreviewText(dl, font, fontSize, tx, ty, tcol, thenwefuckin::settings::tool_outline, tocol, toolStr.c_str());
                 distY += ts.y + 2.0f;
             }
-
             if (thenwefuckin::settings::flags_enabled && (thenwefuckin::settings::flags_team || thenwefuckin::settings::flags_state || thenwefuckin::settings::flags_health))
             {
                 ImFont* font = g_verdanaFont ? g_verdanaFont : ImGui::GetFont();
@@ -1529,17 +1480,13 @@ float4 PS(Pin i) : SV_Target
                 }
             }
         }
-
     }
-
     void render(ImDrawList* dl, ImVec2 min, ImVec2 max)
     {
         ImGuiIO& io = ImGui::GetIO();
         ImVec2 m = io.MousePos;
         double now = ImGui::GetTime();
-
         int64_t uid = kPreviewUid;
-
         {
             static double lastUidCheck = -100.0;
             static int64_t cachedUid = kPreviewUid;
@@ -1571,7 +1518,6 @@ float4 PS(Pin i) : SV_Target
             snprintf(buf, sizeof(buf), "%lld", (long long)uid);
             pull_uid(buf);
         }
-
         ID3D11Device* dev = Overlay::GetDeviceStatic();
         ID3D11DeviceContext* ctx = Overlay::GetContextStatic();
         if (dev && ctx && !s.gfxReady && !s.gfxFailed)
@@ -1590,17 +1536,14 @@ float4 PS(Pin i) : SV_Target
         }
         if (dev && ctx && s.gfxReady)
             commit_meshes(dev);
-
         float vw = floorf(max.x - min.x);
         float vh = floorf(max.y - min.y);
         if (vw < 40.0f || vh < 40.0f)
             return;
-
         ImVec2 vpMin{ floorf(min.x + 2.0f), floorf(min.y + 2.0f) };
         ImVec2 vpMax{ floorf(max.x - 2.0f), floorf(max.y - 2.0f) };
         float vpw = vpMax.x - vpMin.x;
         float vph = vpMax.y - vpMin.y;
-
         bool modelShown = s.gfxReady && s.phase == Phase::Done && !s.meshes.empty() && s.srv;
         if (modelShown && !ensure_rt(dev, (UINT)vpw, (UINT)vph))
             modelShown = false;
@@ -1662,7 +1605,6 @@ float4 PS(Pin i) : SV_Target
                 s.pitch = s.homePitch;
             }
             wasSpin = wantSpin;
-
             float sp = sinf(s.pitch), cp = cosf(s.pitch);
             float sy = sinf(s.yaw), cyy = cosf(s.yaw);
             DirectX::XMVECTOR at = DirectX::XMVectorSet(s.focus.x, s.focus.y, s.focus.z, 1.0f);
@@ -1675,7 +1617,6 @@ float4 PS(Pin i) : SV_Target
             DirectX::XMMATRIX pj = DirectX::XMMatrixPerspectiveFovLH(
                 s.fov * 3.14159265f / 180.0f, (float)s.rtW / (float)s.rtH, 0.1f, 1000.0f);
             DirectX::XMMATRIX wd = DirectX::XMMatrixIdentity();
-
             static double lastScene = -100.0;
             bool animating = wantSpin || dragView;
             bool sceneDue = animating || (now - lastScene) >= (1.0 / 30.0);
@@ -1691,11 +1632,9 @@ float4 PS(Pin i) : SV_Target
             ID3D11DepthStencilState* oldDs = nullptr;
             UINT oldRef = 0;
             ctx->OMGetDepthStencilState(&oldDs, &oldRef);
-
             float bg[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
             ctx->ClearRenderTargetView(s.rtv, bg);
             ctx->ClearDepthStencilView(s.dsv, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
-
             D3D11_VIEWPORT vp{};
             vp.Width = (float)s.rtW; vp.Height = (float)s.rtH;
             vp.MaxDepth = 1.0f;
@@ -1709,7 +1648,6 @@ float4 PS(Pin i) : SV_Target
             ctx->RSSetState(s.raster);
             ID3D11ShaderResourceView* blank = nullptr;
             ctx->PSSetShaderResources(0, 1, &blank);
-
             for (auto& mm : s.meshes)
             {
                 DirectX::XMFLOAT4 col = mm.tint;
@@ -1718,7 +1656,6 @@ float4 PS(Pin i) : SV_Target
                     ctx->PSSetShaderResources(0, 1, &mm.srv);
                 else
                     ctx->PSSetShaderResources(0, 1, &blank);
-
                 D3D11_MAPPED_SUBRESOURCE mmap{};
                 if (SUCCEEDED(ctx->Map(s.ubo, 0, D3D11_MAP_WRITE_DISCARD, 0, &mmap)))
                 {
@@ -1738,7 +1675,6 @@ float4 PS(Pin i) : SV_Target
                 ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
                 ctx->DrawIndexed(mm.count, 0, 0);
             }
-
             ctx->OMSetRenderTargets(1, &oldRtv, oldDsv);
             if (oldRtv) oldRtv->Release();
             if (oldDsv) oldDsv->Release();
@@ -1747,11 +1683,9 @@ float4 PS(Pin i) : SV_Target
             if (oldDs) oldDs->Release();
             ctx->PSSetShaderResources(0, 1, &blank);
             }
-
             ImVec2 wpos = ImGui::GetWindowPos();
             ImGui::SetCursorPos(ImVec2(vpMin.x - wpos.x, vpMin.y - wpos.y));
             ImGui::Image((ImTextureID)s.srv, ImVec2(vpw, vph));
-
             auto project_to_preview = [&](const V3& pt, ImVec2& out) -> bool {
                 DirectX::XMVECTOR p = DirectX::XMVectorSet(pt.x, pt.y, pt.z, 1.0f);
                 DirectX::XMVECTOR clip = DirectX::XMVector4Transform(p, DirectX::XMMatrixMultiply(vwM, pj));
@@ -1766,7 +1700,6 @@ float4 PS(Pin i) : SV_Target
                 out.y = vpMin.y + (-ndcY * 0.5f + 0.5f) * vph;
                 return true;
             };
-
             float hMin = s.bbMin.y;
             float hMax = s.bbMax.y;
             float hTotal = hMax - hMin;
@@ -1775,9 +1708,7 @@ float4 PS(Pin i) : SV_Target
             if (wX < 0.5f) wX = 2.0f;
             float cx = s.focus.x;
             float cz = s.focus.z;
-
             auto find_part = [&](const char* sub) -> V3* {
-
                 size_t slen = strlen(sub);
                 for (auto& kv : s.partCenters)
                 {
@@ -1798,9 +1729,7 @@ float4 PS(Pin i) : SV_Target
                 }
                 return nullptr;
             };
-
             float skelDown = hTotal * 0.055f;
-
             V3* hpMesh = find_part("head");
             V3 headCenter = hpMesh ? *hpMesh : V3{ cx, hMin + hTotal * 0.88f, cz };
             headCenter.y -= skelDown;
@@ -1824,7 +1753,6 @@ float4 PS(Pin i) : SV_Target
             V3 rKnee{ cx + hipW, hMin + hTotal * 0.24f - skelDown, cz };
             V3 lFoot{ cx - hipW, hMin + hTotal * 0.03f - skelDown, cz };
             V3 rFoot{ cx + hipW, hMin + hTotal * 0.03f - skelDown, cz };
-
             thenwefuckin::data::rect rc{};
             if (thenwefuckin::settings::box_mode == 0)
             {
@@ -1875,7 +1803,6 @@ float4 PS(Pin i) : SV_Target
                     rc.y1 = std::ceil(maxY + 2.0f);
                 }
             }
-
             if (rc.empty())
             {
                 float midX = vpMin.x + vpw * 0.5f;
@@ -1887,10 +1814,8 @@ float4 PS(Pin i) : SV_Target
                 rc.y0 = std::floor(midY - hh * 0.5f);
                 rc.y1 = std::floor(midY + hh * 0.5f);
             }
-
             ImVec2 headPt{};
             bool hasHead = project_to_preview(headCenter, headPt);
-
             std::pair<V3, V3> bone3D[] = {
                 { headCenter, neck },
                 { neck, torso },
@@ -1917,7 +1842,6 @@ float4 PS(Pin i) : SV_Target
                 if (project_to_preview(b.first, sa) && project_to_preview(b.second, sb))
                     bones2D.emplace_back(sa, sb);
             }
-
             render_esp_visuals(dl, rc, headPt, bones2D, hasHead, !bones2D.empty());
         }
         else
@@ -1952,11 +1876,9 @@ float4 PS(Pin i) : SV_Target
                 rc.x1 = std::floor(midX + dummyW * 0.5f);
                 rc.y0 = std::floor(midY - dummyH * 0.5f);
                 rc.y1 = std::floor(midY + dummyH * 0.5f);
-
                 dl->AddRectFilled(ImVec2(rc.x0, rc.y0), ImVec2(rc.x1, rc.y1), IM_COL32(22, 22, 26, 120));
                 dl->AddRect(ImVec2(rc.x0, rc.y0), ImVec2(rc.x1, rc.y1), IM_COL32(50, 50, 60, 160));
             }
-
             ImVec2 hs{ midX, rc.y0 + dummyH * 0.14f };
             ImVec2 n{ midX, rc.y0 + dummyH * 0.26f };
             ImVec2 t{ midX, rc.y0 + dummyH * 0.42f };
@@ -1973,7 +1895,6 @@ float4 PS(Pin i) : SV_Target
             ImVec2 rk{ midX + dummyW * 0.20f, rc.y0 + dummyH * 0.78f };
             ImVec2 lf{ midX - dummyW * 0.20f, rc.y1 - 2.0f };
             ImVec2 rf{ midX + dummyW * 0.20f, rc.y1 - 2.0f };
-
             static thread_local std::vector<std::pair<ImVec2, ImVec2>> dummyBones;
             if (dummyBones.empty())
             {
@@ -1988,16 +1909,13 @@ float4 PS(Pin i) : SV_Target
             }
             else
             {
-
                 dummyBones[0] = { hs, n }; dummyBones[1] = { n, t }; dummyBones[2] = { t, p };
                 dummyBones[3] = { n, ls }; dummyBones[4] = { ls, le }; dummyBones[5] = { le, lh };
                 dummyBones[6] = { n, rs }; dummyBones[7] = { rs, re }; dummyBones[8] = { re, rh };
                 dummyBones[9] = { p, l_hip }; dummyBones[10] = { l_hip, lk }; dummyBones[11] = { lk, lf };
                 dummyBones[12] = { p, r_hip }; dummyBones[13] = { r_hip, rk }; dummyBones[14] = { rk, rf };
             }
-
             render_esp_visuals(dl, rc, hs, dummyBones, true, true);
-
             ImFont* fs = g_fontSmall ? g_fontSmall : ImGui::GetFont();
             ImVec2 ts = fs->CalcTextSizeA(11.0f, FLT_MAX, 0.0f, s.note.c_str());
             ImVec2 notePos{ floorf(vpMin.x + vpw * 0.5f - ts.x * 0.5f), floorf(vpMax.y - ts.y - 4.0f) };

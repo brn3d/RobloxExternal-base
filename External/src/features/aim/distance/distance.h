@@ -1,6 +1,5 @@
 #pragma once
 #include "../../../utility/cache/math.h"
-
 namespace thenwefuckin::aim::distance
 {
     bool check(float dist);

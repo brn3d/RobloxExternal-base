@@ -15,7 +15,6 @@
 #include "../struct/offsets.h"
 #pragma comment(lib, "dbghelp.lib")
 #pragma comment(lib, "psapi.lib")
-
 namespace Logger {
     inline std::mutex mtx;
     inline std::atomic<bool> crashActive{false};
@@ -27,7 +26,6 @@ namespace Logger {
     inline bool crashWritten = false;
     inline bool quiet = false;
     inline std::vector<std::string> recent;
-
     inline std::string now_str() {
         using namespace std::chrono;
         auto now = system_clock::now();
@@ -47,12 +45,10 @@ namespace Logger {
         char out[64]; snprintf(out,sizeof(out),"%s_%03d", b, (int)ms.count());
         return out;
     }
-
     inline void note_session(const std::string& s) {
         std::lock_guard<std::mutex> lk(mtx);
         session = s;
     }
-
     inline void prune_old_crashes(const std::string& desk) {
         std::string pattern = desk + "\\thenwefuckin_*.crash";
         WIN32_FIND_DATAA fd{};
@@ -66,7 +62,6 @@ namespace Logger {
         for (size_t i = 0; i + 10 < names.size(); i++)
             DeleteFileA((desk + "\\" + names[i]).c_str());
     }
-
     inline void init() {
         std::lock_guard<std::mutex> lk(mtx);
         if (initialized) return;
@@ -80,7 +75,6 @@ namespace Logger {
         if (file.is_open()) file << "\n========== thenwefuckin log start " << now_str() << " ==========\n" << std::flush;
         prune_old_crashes(desk);
     }
-
     inline void log(const std::string& tag, const std::string& msg) {
         if (!initialized) init();
         std::string line = "[" + now_str() + "] [" + tag + "] " + msg;
@@ -93,15 +87,12 @@ namespace Logger {
         }
         OutputDebugStringA((line + "\n").c_str());
     }
-
     inline void logf(const std::string& tag, const char* fmt, ...) {
         char buf[2048];
         va_list ap; va_start(ap, fmt); vsnprintf(buf, sizeof(buf), fmt, ap); va_end(ap);
         log(tag, buf);
     }
-
     inline void write_crash(EXCEPTION_POINTERS* ep, const char* source) {
-
         if (crashActive.exchange(true)) return;
         std::lock_guard<std::mutex> lk(mtx);
         char* up = nullptr; size_t len = 0;
@@ -185,10 +176,8 @@ namespace Logger {
         if (!quiet) std::cout << "\n!!! CRASH written to " << crashPath << " + " << buildCrash << " !!!\n";
     }
 }
-
 #define LOG(tag, msg) Logger::log(tag, msg)
 #define LOGF(tag, fmt, ...) Logger::logf(tag, fmt, __VA_ARGS__)
-
 inline LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     if (IsDebuggerPresent()) return EXCEPTION_CONTINUE_SEARCH;
     Logger::log("CRASH", "unhandled exception!");
