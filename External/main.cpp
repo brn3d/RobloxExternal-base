@@ -13,6 +13,7 @@ bool g_streamProof = false;
 int g_fpsCap = 0;
 float g_localSpeed = -1.0f;
 namespace {
+DWORD g_crashMainTid = 0;
 bool is_admin() {
     BOOL admin = FALSE;
     SID_IDENTIFIER_AUTHORITY nt = SECURITY_NT_AUTHORITY;
@@ -60,6 +61,7 @@ void on_sigabrt(int) {
 int main()
 {
     using namespace thenwefuckin::app;
+    g_crashMainTid = GetCurrentThreadId();
     SetUnhandledExceptionFilter(CrashHandler);
     AddVectoredExceptionHandler(1, [](PEXCEPTION_POINTERS ep)->LONG {
         if (IsDebuggerPresent()) return EXCEPTION_CONTINUE_SEARCH;
@@ -67,6 +69,33 @@ int main()
         if (code == 0x406D1388 || code == 0x40010006 || code == 0x4001000A || code == 0xE06D7363 ||
             code == 0x80000003 || code == 0x80000004 ||
             (code >= 0x000006A4 && code <= 0x000007CF)) return EXCEPTION_CONTINUE_SEARCH;
+        // Faults outside our own exe come from third-party threads living in this
+        // process (GPU driver workers, overlays - e.g. nvwgf2umx.dll AVs). Killing
+        // the whole cheat for those is wrong: terminate just that thread and
+        // keep running. Only the main thread is allowed to take us down.
+        if (ep && ep->ExceptionRecord && ep->ContextRecord && GetCurrentThreadId() != g_crashMainTid)
+        {
+            HMODULE self = GetModuleHandleW(nullptr);
+            MODULEINFO mi{};
+            if (self && GetModuleInformation(GetCurrentProcess(), self, &mi, sizeof(mi)))
+            {
+                auto base = (uintptr_t)mi.lpBaseOfDll;
+                auto addr = (uintptr_t)ep->ExceptionRecord->ExceptionAddress;
+                if (addr < base || addr >= base + (uintptr_t)mi.SizeOfImage)
+                {
+                    FARPROC exitThread = GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "ExitThread");
+                    if (exitThread)
+                    {
+                        // Save it first: every fault gets a .crash file, then
+                        // only that thread dies - the cheat keeps running.
+                        Logger::write_crash(ep, "VEH-foreign", true);
+                        ep->ContextRecord->Rip = (DWORD64)(uintptr_t)exitThread;
+                        ep->ContextRecord->Rcx = 0;
+                        return EXCEPTION_CONTINUE_EXECUTION;
+                    }
+                }
+            }
+        }
         static long long lastMs=0; static int count=0;
         long long now = GetTickCount64();
         if (now - lastMs < 500) return EXCEPTION_CONTINUE_SEARCH;

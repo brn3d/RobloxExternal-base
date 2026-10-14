@@ -108,7 +108,16 @@
       <Filter>Header Files\features</Filter>
     </ClInclude>
     <ClInclude Include="src\features\aim\core\aim.h">
-      <Filter>Header Files\features</Filter>
+      <Filter>Source Files\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\aim\predict\predict.h">
+      <Filter>Source Files\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\visual\players\avatars.h">
+      <Filter>Source Files\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\visual\players\friends.h">
+      <Filter>Source Files\features</Filter>
     </ClInclude>
     <ClInclude Include="src\features\aim\distance\distance.h">
       <Filter>Header Files\features</Filter>
@@ -117,6 +126,9 @@
       <Filter>Header Files\features</Filter>
     </ClInclude>
     <ClInclude Include="src\features\aim\mouse\mouse.h">
+      <Filter>Header Files\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\aim\memory\memory.h">
       <Filter>Header Files\features</Filter>
     </ClInclude>
     <ClInclude Include="src\features\aim\smooth\smooth.h">
@@ -150,6 +162,9 @@
       <Filter>Header Files\features</Filter>
     </ClInclude>
     <ClInclude Include="src\features\misc\freecam\freecam.h">
+      <Filter>Header Files\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\misc\spectate\spectate.h">
       <Filter>Header Files\features</Filter>
     </ClInclude>
     <ClInclude Include="src\features\misc\gravity\gravity.h">
@@ -316,6 +331,15 @@
     <ClCompile Include="src\features\aim\core\aim.cpp">
       <Filter>Source Files\features</Filter>
     </ClCompile>
+    <ClCompile Include="src\features\aim\predict\predict.cpp">
+      <Filter>Source Files\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\visual\players\avatars.cpp">
+      <Filter>Source Files\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\visual\players\friends.cpp">
+      <Filter>Source Files\features</Filter>
+    </ClCompile>
     <ClCompile Include="src\features\aim\distance\distance.cpp">
       <Filter>Source Files\features</Filter>
     </ClCompile>
@@ -323,6 +347,9 @@
       <Filter>Source Files\features</Filter>
     </ClCompile>
     <ClCompile Include="src\features\aim\mouse\mouse.cpp">
+      <Filter>Source Files\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\aim\memory\memory.cpp">
       <Filter>Source Files\features</Filter>
     </ClCompile>
     <ClCompile Include="src\features\aim\smooth\smooth.cpp">
@@ -355,7 +382,13 @@
     <ClCompile Include="src\features\misc\fly\fly.cpp">
       <Filter>Source Files\features</Filter>
     </ClCompile>
+    <ClCompile Include="src\features\visual\world\geo\geo.cpp">
+      <Filter>Source Files\features</Filter>
+    </ClCompile>
     <ClCompile Include="src\features\misc\freecam\freecam.cpp">
+      <Filter>Source Files\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\misc\spectate\spectate.cpp">
       <Filter>Source Files\features</Filter>
     </ClCompile>
     <ClCompile Include="src\features\misc\gravity\gravity.cpp">

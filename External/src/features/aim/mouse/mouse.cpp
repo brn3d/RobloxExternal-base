@@ -1,5 +1,7 @@
 #include "mouse.h"
 #include "../core/aim.h"
+#include "../predict/predict.h"
+#include "../../visual/world/geo/geo.h"
 #include "../health/health.h"
 #include "../distance/distance.h"
 #include "../tracking/tracking.h"
@@ -277,13 +279,16 @@ namespace thenwefuckin::aim::mouse
         math::vec3 best{};
         bool found = false;
         const bool wide = settings::aim_360;
-        float bestDist = wide ? 1e9f : settings::aim_fov;
+        const int prio = settings::aim_priority;
+        float bestDist = (wide || prio != 0) ? 1e9f : settings::aim_fov;
+        math::vec3 lpPos = g_ctx.local_pos;
+        if (lpPos.x == 0.0f && lpPos.y == 0.0f && lpPos.z == 0.0f)
+            lpPos = camPos;
         float bestPx = 1e9f;
         uintptr_t bestPlayer = 0;
-        const uintptr_t localTeam = thenwefuckin::aim::local_team_addr();
         for (auto& t : s_targets)
         {
-            if (thenwefuckin::aim::should_skip_teammate(localTeam, t.teamAddr))
+            if (thenwefuckin::aim::is_teammate(t.playerAddr, t.characterAddr, t.teamAddr))
                 continue;
             if (t.isBot)
             {
@@ -312,13 +317,19 @@ namespace thenwefuckin::aim::mouse
             tracking::push(t.playerAddr, pos.x, pos.y, pos.z);
             if (!distance::check(pos, camPos))
                 continue;
+            if (settings::aim_visible_check && !worldgeo::visible(camPos, pos))
+                continue;
             math::vec2 s{};
             if (!projection::to_screen(pos, view, static_cast<float>(w), static_cast<float>(h), s))
                 continue;
             float dx = s.x - cx;
             float dy = s.y - cy;
             float px = sqrtf(dx * dx + dy * dy);
-            float d = wide ? (pos - camPos).length() : px;
+            float d = px;
+            if (wide || prio == 2)
+                d = (pos - camPos).length();
+            else if (prio == 1)
+                d = (pos - lpPos).length();
             if (d < bestDist)
             {
                 bestDist = d;
@@ -360,24 +371,49 @@ namespace thenwefuckin::aim::mouse
             s_inDeadzone = false;
         }
         {
-            float scanDt = 0.004f;
-            float smoothLag = 0.0f;
-            if (settings::aim_smoothing_enabled)
-            {
-                float sx = settings::aim_smoothing_x;
-                if (sx < 1.0f) sx = 1.0f;
-                smoothLag = (sx - 1.0f) * scanDt;
-            }
-            float leadT = scanDt + smoothLag;
             tracking::Velocity tv{};
-            if (bestPlayer && tracking::sample(bestPlayer, tv))
+            bool haveTv = bestPlayer && tracking::sample(bestPlayer, tv);
+            if (settings::aim_prediction && haveTv)
             {
-                float damp = tv.damp;
-                float airDampY = tv.airborne ? 0.35f : 1.0f;
-                math::vec3 lv = g_ctx.local_velocity;
-                best.x += (tv.vx - lv.x) * leadT * damp;
-                best.y += (tv.vy - lv.y) * leadT * damp * airDampY;
-                best.z += (tv.vz - lv.z) * leadT * damp;
+                if (settings::aim_pred_mode == 1)
+                {
+                    predict::fallen_update_weapon_auto();
+                    float bv = predict::fallen_get_bullet_velocity(predict::fallen_get_local_weapon());
+                    if (bv > 0.0f)
+                    {
+                        math::vec3 tp = best;
+                        math::vec3 tvel{ tv.vx * tv.damp, tv.vy, tv.vz * tv.damp };
+                        predict::fallen_predict(tp, camPos, tvel, bv, g_ctx.local_velocity);
+                        best = tp;
+                    }
+                }
+                else
+                {
+                    float scanDt = 0.004f;
+                    float smoothLag = 0.0f;
+                    if (settings::aim_smoothing_enabled)
+                    {
+                        float sx = settings::aim_smoothing_x;
+                        if (sx < 1.0f) sx = 1.0f;
+                        smoothLag = (sx - 1.0f) * scanDt;
+                    }
+                    float leadT = scanDt + smoothLag;
+                    float damp = tv.damp;
+                    float airDampY = tv.airborne ? 0.35f : 1.0f;
+                    math::vec3 lv = g_ctx.local_velocity;
+                    best.x += (tv.vx - lv.x) * leadT * damp;
+                    best.y += (tv.vy - lv.y) * leadT * damp * airDampY;
+                    best.z += (tv.vz - lv.z) * leadT * damp;
+                    best.y += settings::aim_pred_height;
+                    float fvx = tv.vx * tv.damp;
+                    float fvz = tv.vz * tv.damp;
+                    float fl = sqrtf(fvx * fvx + fvz * fvz);
+                    if (fl > 0.01f && settings::aim_pred_forward != 0.0f)
+                    {
+                        best.x += fvx / fl * settings::aim_pred_forward;
+                        best.z += fvz / fl * settings::aim_pred_forward;
+                    }
+                }
             }
         }
         thenwefuckin::aim::set_debug_target(best, bestPlayer);

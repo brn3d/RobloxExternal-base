@@ -77,17 +77,6 @@ namespace thenwefuckin::bots
                 dl->AddRect(ImVec2(x0, y0), ImVec2(x1, y1), col);
                 dl->AddRect(ImVec2(x0 + 1.0f, y0 + 1.0f), ImVec2(x1 - 1.0f, y1 - 1.0f), IM_COL32(0, 0, 0, 255));
             }
-            if (e.maxHp > 0.0f && e.hp >= 0.0f)
-            {
-                data::rect rc{};
-                rc.x0 = x0;
-                rc.x1 = x1;
-                rc.y0 = y0;
-                rc.y1 = y1;
-                ImU32 hoc = ImGui::ColorConvertFloat4ToU32(ImVec4(settings::health_outline_color[0], settings::health_outline_color[1], settings::health_outline_color[2], 1.0f));
-                ImU32 hcol = ImGui::ColorConvertFloat4ToU32(ImVec4(settings::health_color[0], settings::health_color[1], settings::health_color[2], 1.0f));
-                visual::health::draw(dl, rc, e.hp, e.maxHp, settings::health_outline, hoc, settings::health_gradient, settings::health_text, hcol, settings::box_enabled && settings::box_outline, 1.0f);
-            }
             float meters = e.dist * 0.28f;
             if (meters < 10.0f)
                 snprintf(buf, sizeof(buf), "%.1fm", (double)meters);

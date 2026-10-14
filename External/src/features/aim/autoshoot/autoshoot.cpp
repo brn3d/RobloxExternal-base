@@ -1,5 +1,6 @@
 #include "autoshoot.h"
 #include "../core/aim.h"
+#include "../../visual/world/geo/geo.h"
 #include "../health/health.h"
 #include "../distance/distance.h"
 #include "../pftarget/pftarget.h"
@@ -175,6 +176,8 @@ namespace thenwefuckin::aim::autoshoot
                     continue;
                 if (!distance::check(pos, camPos))
                     continue;
+                if (settings::aim_visible_check && !worldgeo::visible(camPos, pos))
+                    continue;
                 math::vec2 s{};
                 if (!projection::to_screen(pos, view, static_cast<float>(w), static_cast<float>(h), s))
                     continue;
@@ -207,6 +210,8 @@ namespace thenwefuckin::aim::autoshoot
                         continue;
                     if (!distance::check(pos, camPos))
                         continue;
+                    if (settings::aim_visible_check && !worldgeo::visible(camPos, pos))
+                        continue;
                     math::vec2 s{};
                     if (!projection::to_screen(pos, view, static_cast<float>(w), static_cast<float>(h), s))
                         continue;
@@ -235,10 +240,9 @@ namespace thenwefuckin::aim::autoshoot
         float cy = static_cast<float>(h) * 0.5f;
         const math::view_matrix& view = g_ctx.view;
         math::vec3 camPos = g_proc->read<math::vec3>(g_ctx.camera.addr + Offsets::Camera::Position);
-        const uintptr_t localTeam = thenwefuckin::aim::local_team_addr();
         for (auto& t : s_chTargets)
         {
-            if (thenwefuckin::aim::should_skip_teammate(localTeam, t.teamAddr))
+            if (thenwefuckin::aim::is_teammate(t.playerAddr, t.characterAddr, t.teamAddr))
                 continue;
             if (t.isBot)
             {
@@ -264,6 +268,8 @@ namespace thenwefuckin::aim::autoshoot
             if (rootPos.x == 0.0f && rootPos.y == 0.0f && rootPos.z == 0.0f) continue;
             if ((headPos - rootPos).length() > 10.0f) continue;
             if (!distance::check(headPos, camPos))
+                continue;
+            if (settings::aim_visible_check && !worldgeo::visible(camPos, headPos))
                 continue;
             math::vec3 top3{ headPos.x, headPos.y + 0.6f, headPos.z };
             math::vec3 bot3{ rootPos.x, rootPos.y - 2.8f, rootPos.z };

@@ -8,6 +8,8 @@
 #include "../world/tools/tools.h"
 #include "../world/crates/crates.h"
 #include "../world/keycards/keycards.h"
+#include "../world/geo/geo.h"
+#include "../players/friends.h"
 #include "../../../menu/overlay/settings.h"
 #include "../box/box.h"
 #include "../skeleton/skeleton.h"
@@ -277,10 +279,12 @@ namespace thenwefuckin::visual
         ore::clear();
         plants::clear();
         bots::clear();
+        worldgeo::clear();
         animals::clear();
         tools::clear();
         crates::clear();
         keycards::clear();
+        players::friends::clear();
     }
     void render(ImDrawList* dl, int w, int h)
     {
@@ -636,6 +640,8 @@ namespace thenwefuckin::visual
             }
             float studsDist = (wc.root - g_ctx.local_pos).length();
             if (studsDist < 0.1f) studsDist = (wc.head - g_ctx.local_pos).length();
+            if (studsDist > settings::visual_maxdist)
+                continue;
             float metersDist = studsDist * 0.28f;
             float distScale = std::clamp(18.0f / (studsDist + 8.0f) + 0.55f, 0.55f, 1.45f);
 
@@ -644,6 +650,7 @@ namespace thenwefuckin::visual
             bool oversize = (rcW > fw * 0.85f || rcH > fh * 0.85f);
             if (settings::box_enabled && !oversize)
             {
+                ImU32 drawCol = players::friends::is_friend(wc.playerAddr) ? IM_COL32(0, 255, 0, 255) : boxCol;
                 if (settings::box_filled) {
                     if (settings::box_fill_gradient) {
                         box::draw_fill_gradient(dl, rc.x0, rc.y0, rc.x1, rc.y1, boxFill1, boxFill2);
@@ -652,9 +659,9 @@ namespace thenwefuckin::visual
                     }
                 }
                 if (settings::box_style == 1) {
-                    box::draw_corner(dl, rc.x0, rc.y0, rc.x1, rc.y1, boxCol, settings::box_outline, boxOutlineCol);
+                    box::draw_corner(dl, rc.x0, rc.y0, rc.x1, rc.y1, drawCol, settings::box_outline, boxOutlineCol);
                 } else {
-                    box::draw(dl, rc.x0, rc.y0, rc.x1, rc.y1, boxCol, settings::box_outline, boxOutlineCol);
+                    box::draw(dl, rc.x0, rc.y0, rc.x1, rc.y1, drawCol, settings::box_outline, boxOutlineCol);
                 }
             }
             if (settings::health_enabled) {

@@ -75,6 +75,13 @@ namespace thenwefuckin::aim::tracking
         out.vx = (float)(((double)n * stx - st * sx) / denom);
         out.vy = (float)(((double)n * sty - st * sy) / denom);
         out.vz = (float)(((double)n * stz - st * sz) / denom);
+        float hSpeed = sqrtf(out.vx * out.vx + out.vz * out.vz);
+        if (hSpeed < 2.0f && fabsf(out.vy) < 2.0f)
+        {
+            out.vx = 0.0f;
+            out.vy = 0.0f;
+            out.vz = 0.0f;
+        }
         float yMin = dq.front().y, yMax = dq.front().y;
         for (auto& s : dq)
         {

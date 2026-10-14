@@ -1,10 +1,12 @@
 #include "aim.h"
 #include "../mouse/mouse.h"
+#include "../memory/memory.h"
 #include "../viewport/viewport.h"
 #include "../raycast/raycast.h"
 #include "../wraith/wraith.h"
 #include "../autoshoot/autoshoot.h"
 #include "../tracking/tracking.h"
+#include "../pftarget/pftarget.h"
 #include "../../visual/world/core/scan.h"
 #include "../../../utility/struct/offsets.h"
 #include "../../../menu/overlay/settings.h"
@@ -162,6 +164,27 @@ namespace thenwefuckin::aim
             return false;
         return localTeam == targetTeam;
     }
+    bool is_teammate(uintptr_t playerAddr, uintptr_t characterAddr, uintptr_t teamAddr)
+    {
+        if (!settings::aim_team_check)
+            return false;
+        uintptr_t localTeam = local_team_addr();
+        if (localTeam && teamAddr && localTeam == teamAddr)
+            return true;
+        if (pftarget::active() && characterAddr)
+        {
+            for (auto& p : PfCache::players)
+            {
+                if (!p.isValid || p.modelAddr != characterAddr)
+                    continue;
+                if (p.modelAddr == PfCache::localCharacterAddr)
+                    return true;
+                return PfCache::IsTeammate(p);
+            }
+        }
+        (void)playerAddr;
+        return false;
+    }
     void on_game_joined()
     {
         s_hasDebugTarget = false;
@@ -169,6 +192,7 @@ namespace thenwefuckin::aim
         s_prevPlayer = 0;
         tracking::clear_all();
         mouse::on_game_joined();
+        memory::on_game_joined();
         viewport::on_game_joined();
         raycast::on_game_joined();
         wraith::on_game_joined();
@@ -230,20 +254,28 @@ namespace thenwefuckin::aim
     {
         bool keyOn = settings::aim_enabled && Menu::IsMenuKeyActive("##aim_key", settings::aim_key, settings::aim_key_mode);
         if (keyOn && settings::aim_method == 0)
-            mouse::run(w, h);
+            memory::run(w, h);
         else if (keyOn && settings::aim_method == 1)
-            viewport::run(w, h);
+            mouse::run(w, h);
         else if (keyOn && settings::aim_method == 2)
-            raycast::run(w, h);
+            viewport::run(w, h);
         else if (keyOn && settings::aim_method == 3)
+            raycast::run(w, h);
+        else if (keyOn && settings::aim_method == 4)
             wraith::run(w, h);
         else
         {
             viewport::clear();
             clear_debug_target();
         }
-        if (settings::aim_method != 1)
+        if (settings::aim_method != 2)
             viewport::clear();
+        if (settings::aim_method != 3 || !keyOn)
+            raycast::idle();
+        if (settings::aim_method != 4 || !keyOn)
+            wraith::idle();
+        if (settings::aim_method != 0)
+            memory::clear();
         if (settings::aim_method != 2 || !keyOn)
             raycast::idle();
         if (settings::aim_method != 3 || !keyOn)

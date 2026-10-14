@@ -13,8 +13,12 @@ namespace thenwefuckin::misc::fly
         bool s_wasEnabled = false;
         std::chrono::steady_clock::time_point s_lastTick{};
         uintptr_t s_lastRootPrim = 0;
-        uintptr_t s_anchoredPrim = 0;
-        bool s_savedAnchored = false;
+        uintptr_t s_speedHum = 0;
+        float s_savedWalkSpeed = 16.0f;
+        float s_savedWalkSpeedCheck = 16.0f;
+        bool s_speedPinned = false;
+        math::vec3 s_holdPos{};
+        bool s_haveHold = false;
 
         void set_collide(const node& character, bool collide)
         {
@@ -57,26 +61,42 @@ namespace thenwefuckin::misc::fly
             g_proc->write<math::vec3>(prim + Offsets::Primitive::AssemblyAngularVelocity, zero);
         }
 
-        void set_anchored(uintptr_t prim, bool anchored)
+        void restore_speed()
         {
-            if (!prim || !g_proc || !g_proc->connected())
+            if (!s_speedPinned)
                 return;
-            uint8_t flags = g_proc->read<uint8_t>(prim + Offsets::Primitive::PrimitiveFlags);
-            bool has = (flags & Offsets::PrimitiveFlags::Anchored) != 0;
-            if (has == anchored)
+            s_speedPinned = false;
+            if (!g_proc || !g_proc->connected())
                 return;
-            uint8_t next = anchored
-                ? static_cast<uint8_t>(flags | Offsets::PrimitiveFlags::Anchored)
-                : static_cast<uint8_t>(flags & ~Offsets::PrimitiveFlags::Anchored);
-            g_proc->write<uint8_t>(prim + Offsets::Primitive::PrimitiveFlags, next);
+            node humanoid = g_ctx.local_humanoid;
+            if (!humanoid)
+                humanoid = g_ctx.resolve_local_humanoid();
+            if (humanoid)
+            {
+                g_proc->write<float>(humanoid.addr + Offsets::Humanoid::WalkSpeed, s_savedWalkSpeed);
+                g_proc->write<float>(humanoid.addr + Offsets::Humanoid::WalkSpeedCheck, s_savedWalkSpeedCheck);
+            }
         }
 
-        bool is_anchored(uintptr_t prim)
+        void pin_speed()
         {
-            if (!prim || !g_proc || !g_proc->connected())
-                return false;
-            uint8_t flags = g_proc->read<uint8_t>(prim + Offsets::Primitive::PrimitiveFlags);
-            return (flags & Offsets::PrimitiveFlags::Anchored) != 0;
+            if (!g_proc || !g_proc->connected())
+                return;
+            node humanoid = g_ctx.local_humanoid;
+            if (!humanoid)
+                return;
+            if (!s_speedPinned || s_speedHum != humanoid.addr)
+            {
+                float ws = g_proc->read<float>(humanoid.addr + Offsets::Humanoid::WalkSpeed);
+                float wsc = g_proc->read<float>(humanoid.addr + Offsets::Humanoid::WalkSpeedCheck);
+                s_savedWalkSpeed = (ws > 0.0f && ws <= 500.0f) ? ws : 16.0f;
+                s_savedWalkSpeedCheck = (wsc > 0.0f && wsc <= 500.0f) ? wsc : s_savedWalkSpeed;
+                s_speedHum = humanoid.addr;
+                s_speedPinned = true;
+            }
+            // Keep the humanoid controller from fighting our velocity writes.
+            g_proc->write<float>(humanoid.addr + Offsets::Humanoid::WalkSpeed, 0.0f);
+            g_proc->write<float>(humanoid.addr + Offsets::Humanoid::WalkSpeedCheck, 0.0f);
         }
     }
 
@@ -91,8 +111,11 @@ namespace thenwefuckin::misc::fly
             return;
         if (!g_proc || !g_proc->connected())
         {
+            restore_speed();
             s_wasEnabled = false;
-            s_anchoredPrim = 0;
+            s_speedPinned = false;
+            s_speedHum = 0;
+            s_haveHold = false;
             s_lastRootPrim = 0;
             return;
         }
@@ -102,14 +125,12 @@ namespace thenwefuckin::misc::fly
             node character = g_ctx.get_character(g_ctx.local_player);
             if (character)
                 set_collide(character, true);
+            restore_speed();
             node root = g_ctx.local_root;
-            uintptr_t unanchorPrim = root ? root.primitive() : 0;
-            if (s_anchoredPrim && unanchorPrim && unanchorPrim == s_anchoredPrim)
-                set_anchored(unanchorPrim, s_savedAnchored);
-            s_anchoredPrim = 0;
             if (root)
                 stop_motion(root.primitive());
             s_wasEnabled = false;
+            s_haveHold = false;
             return;
         }
         if (!g_ctx.ready || !g_ctx.local_root || !g_ctx.camera)
@@ -126,6 +147,8 @@ namespace thenwefuckin::misc::fly
             if (seat != 0)
                 return;
         }
+
+        pin_speed();
 
         auto now = std::chrono::steady_clock::now();
         float dt = 0.016f;
@@ -145,13 +168,11 @@ namespace thenwefuckin::misc::fly
         if (prim != s_lastRootPrim)
         {
             s_lastRootPrim = prim;
-            s_anchoredPrim = 0;
+            s_haveHold = false;
         }
 
-        node character = g_ctx.get_character(g_ctx.local_player);
-        if (character)
-            set_collide(character, false);
-
+        // NOTE: no collision changes here - fly must not noclip. If you want to
+        // pass through walls, use the separate noclip feature.
         math::frame cf = g_proc->read<math::frame>(g_ctx.camera.addr + Offsets::Camera::Rotation);
         math::vec3 forward{ -cf.rot[2], -cf.rot[5], -cf.rot[8] };
         math::vec3 right{ cf.rot[0], cf.rot[3], cf.rot[6] };
@@ -181,12 +202,8 @@ namespace thenwefuckin::misc::fly
         math::vec3 move = forward * fwdIn + right * sideIn + worldUp * upIn;
         if (move.length() > 0.000001f)
         {
-
-            if (s_anchoredPrim == prim)
-            {
-                set_anchored(prim, s_savedAnchored);
-                s_anchoredPrim = 0;
-            }
+            // Flying: position + matching velocity, no anchor juggling.
+            s_haveHold = false;
             move = move.normalized();
             math::vec3 newPos = curPos + move * (speed * dt);
             g_proc->write<math::vec3>(prim + Offsets::Primitive::Position, newPos);
@@ -196,13 +213,18 @@ namespace thenwefuckin::misc::fly
         }
         else
         {
-
-            if (s_anchoredPrim != prim)
+            // Hovering still: hard position-lock to the latched spot with
+            // velocity pinned at zero. Anchor-only hover slowly sinks because
+            // the game clears externally-written anchor flags on its own.
+            if (!s_haveHold)
             {
-                s_savedAnchored = is_anchored(prim);
-                s_anchoredPrim = prim;
+                if (curPos.x == 0.0f && curPos.y == 0.0f && curPos.z == 0.0f)
+                    return;
+                s_holdPos = curPos;
+                s_haveHold = true;
             }
-            set_anchored(prim, true);
+            g_proc->write<math::vec3>(prim + Offsets::Primitive::Position, s_holdPos);
+            stop_motion(prim);
         }
         s_wasEnabled = true;
     }
