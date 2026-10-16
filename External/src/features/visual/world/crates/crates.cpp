@@ -23,8 +23,11 @@ namespace thenwefuckin::crates
         world::refresh_entries();
         if (world::g_entries.empty())
             return;
-        math::view_matrix view{};
-        if (!world::fetch_view(view))
+
+        math::view_matrix view = thenwefuckin::visual::wcache::viewValid
+            ? thenwefuckin::visual::wcache::view
+            : math::view_matrix{};
+        if (!thenwefuckin::visual::wcache::viewValid && !world::fetch_view(view))
             return;
         ImFont* font = g_verdanaFont ? g_verdanaFont : ImGui::GetFont();
         float fw = static_cast<float>(w);

@@ -67,7 +67,7 @@ namespace thenwefuckin::misc::spectate
             return;
         }
         s_target = playerAddr;
-        // Freecam owns the camera (subject = 0), so it cannot run together with spectate.
+
         settings::freecam_enabled = false;
         if (g_proc && g_proc->connected() && g_ctx.ready && g_ctx.camera)
         {
@@ -109,7 +109,7 @@ namespace thenwefuckin::misc::spectate
     {
         if (!playerAddr || !g_proc || !g_proc->connected() || !g_ctx.ready)
             return false;
-        // Teleporting while spectating leaves the camera behind, so unspectate first.
+
         if (s_target)
             stop();
         node pl{ playerAddr };
@@ -136,7 +136,7 @@ namespace thenwefuckin::misc::spectate
         uintptr_t myPrim = g_ctx.local_root.primitive();
         if (!myPrim)
             return false;
-        // Land beside/above them instead of inside them.
+
         math::vec3 land{ dst.x + 3.0f, dst.y + 4.0f, dst.z + 3.0f };
         g_proc->write<math::vec3>(myPrim + Offsets::Primitive::Position, land);
         math::vec3 zero{};
@@ -156,7 +156,7 @@ namespace thenwefuckin::misc::spectate
         }
         if (!g_ctx.ready || !g_ctx.camera)
             return;
-        // Freecam detaches the camera (subject = 0); don't fight it.
+
         if (settings::freecam_enabled)
             return;
         if (g_ctx.local_player && s_target == g_ctx.local_player.addr)

@@ -92,15 +92,13 @@ namespace Logger {
         va_list ap; va_start(ap, fmt); vsnprintf(buf, sizeof(buf), fmt, ap); va_end(ap);
         log(tag, buf);
     }
-    // force=true bypasses the one-report-per-run gate (used for foreign/
-    // driver-thread faults so every single one lands in its own .crash file).
+
     inline void write_crash(EXCEPTION_POINTERS* ep, const char* source, bool force = false) {
         if (!force && crashActive.exchange(true)) return;
         std::unique_lock<std::mutex> lk(mtx, std::defer_lock);
         if (force)
         {
-            // The faulting thread might be holding the log mutex itself;
-            // never deadlock it - just skip the report then.
+
             if (!lk.try_lock()) return;
         }
         else
@@ -139,7 +137,7 @@ namespace Logger {
                 out << "\n";
             }
             {
-                // Which module actually faulted - saves guessing next time.
+
                 std::string faultMod = "?";
                 if (ep && ep->ExceptionRecord)
                 {
@@ -220,9 +218,7 @@ namespace Logger {
 #define LOGF(tag, fmt, ...) Logger::logf(tag, fmt, __VA_ARGS__)
 inline LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     if (IsDebuggerPresent()) return EXCEPTION_CONTINUE_SEARCH;
-    // Same rule as the VEH in main.cpp: a faulting address outside our own exe
-    // belongs to a third-party module (driver/overlay). Don't pop our crash
-    // dialog for those.
+
     if (ep && ep->ExceptionRecord)
     {
         HMODULE self = GetModuleHandleW(nullptr);
@@ -233,8 +229,7 @@ inline LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
             auto addr = (uintptr_t)ep->ExceptionRecord->ExceptionAddress;
             if (addr < base || addr >= base + (uintptr_t)mi.SizeOfImage)
             {
-                // Foreign fault reaching the UEF: still save it, then let the
-                // system have it (no dialog from us for driver faults).
+
                 Logger::write_crash(ep, "UEF-foreign", true);
                 if (Logger::file.is_open()) Logger::file.flush();
                 return EXCEPTION_CONTINUE_SEARCH;

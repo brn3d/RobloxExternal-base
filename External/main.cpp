@@ -69,10 +69,7 @@ int main()
         if (code == 0x406D1388 || code == 0x40010006 || code == 0x4001000A || code == 0xE06D7363 ||
             code == 0x80000003 || code == 0x80000004 ||
             (code >= 0x000006A4 && code <= 0x000007CF)) return EXCEPTION_CONTINUE_SEARCH;
-        // Faults outside our own exe come from third-party threads living in this
-        // process (GPU driver workers, overlays - e.g. nvwgf2umx.dll AVs). Killing
-        // the whole cheat for those is wrong: terminate just that thread and
-        // keep running. Only the main thread is allowed to take us down.
+
         if (ep && ep->ExceptionRecord && ep->ContextRecord && GetCurrentThreadId() != g_crashMainTid)
         {
             HMODULE self = GetModuleHandleW(nullptr);
@@ -86,8 +83,7 @@ int main()
                     FARPROC exitThread = GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "ExitThread");
                     if (exitThread)
                     {
-                        // Save it first: every fault gets a .crash file, then
-                        // only that thread dies - the cheat keeps running.
+
                         Logger::write_crash(ep, "VEH-foreign", true);
                         ep->ContextRecord->Rip = (DWORD64)(uintptr_t)exitThread;
                         ep->ContextRecord->Rcx = 0;

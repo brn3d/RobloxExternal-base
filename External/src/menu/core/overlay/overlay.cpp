@@ -142,17 +142,17 @@ void Overlay::Run()
         EndFrame();
         {
             auto frameStart = std::chrono::steady_clock::now();
-            if (g_fpsCap > 0)
+            if (g_fpsCap >= 30)
             {
+
                 auto target = std::chrono::microseconds(1000000 / g_fpsCap);
                 auto elapsed = frameStart - m_lastFrameStart;
                 if (elapsed < target)
                 {
-                    auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(target - elapsed);
-                    if (waitMs.count() > 0)
-                    {
-                        std::this_thread::sleep_for(waitMs);
-                    }
+                    auto remain = target - elapsed;
+                    if (remain > std::chrono::milliseconds(2))
+                        std::this_thread::sleep_for(remain - std::chrono::milliseconds(1));
+                    while (std::chrono::steady_clock::now() - m_lastFrameStart < target) { }
                 }
             }
             m_lastFrameStart = frameStart;

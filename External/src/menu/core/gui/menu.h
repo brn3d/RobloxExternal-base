@@ -313,14 +313,8 @@ inline void DrawPixelBox(ImDrawList* dl, ImVec2 min, ImVec2 max, ImU32 bg_col, I
 }
 inline void DrawOutlinedText(ImDrawList* dl, ImFont* font, float font_size, ImVec2 pos, ImU32 text_col, ImU32 outline_col, const char* text)
 {
+
     ImVec2 p(floorf(pos.x), floorf(pos.y));
-    dl->AddText(font, font_size, ImVec2(p.x - 1.0f, p.y), outline_col, text);
-    dl->AddText(font, font_size, ImVec2(p.x + 1.0f, p.y), outline_col, text);
-    dl->AddText(font, font_size, ImVec2(p.x, p.y - 1.0f), outline_col, text);
-    dl->AddText(font, font_size, ImVec2(p.x, p.y + 1.0f), outline_col, text);
-    dl->AddText(font, font_size, ImVec2(p.x - 1.0f, p.y - 1.0f), outline_col, text);
-    dl->AddText(font, font_size, ImVec2(p.x + 1.0f, p.y - 1.0f), outline_col, text);
-    dl->AddText(font, font_size, ImVec2(p.x - 1.0f, p.y + 1.0f), outline_col, text);
     dl->AddText(font, font_size, ImVec2(p.x + 1.0f, p.y + 1.0f), outline_col, text);
     dl->AddText(font, font_size, p, text_col, text);
 }
@@ -351,13 +345,6 @@ inline void DrawWaveText(ImDrawList* dl, ImFont* font, float font_size, ImVec2 p
     {
         char buf[2] = { chars[i], '\0' };
         ImVec2 p = pts[i];
-        dl->AddText(f, fs, ImVec2(p.x - 1.0f, p.y), outline_col, buf);
-        dl->AddText(f, fs, ImVec2(p.x + 1.0f, p.y), outline_col, buf);
-        dl->AddText(f, fs, ImVec2(p.x, p.y - 1.0f), outline_col, buf);
-        dl->AddText(f, fs, ImVec2(p.x, p.y + 1.0f), outline_col, buf);
-        dl->AddText(f, fs, ImVec2(p.x - 1.0f, p.y - 1.0f), outline_col, buf);
-        dl->AddText(f, fs, ImVec2(p.x + 1.0f, p.y - 1.0f), outline_col, buf);
-        dl->AddText(f, fs, ImVec2(p.x - 1.0f, p.y + 1.0f), outline_col, buf);
         dl->AddText(f, fs, ImVec2(p.x + 1.0f, p.y + 1.0f), outline_col, buf);
     }
     for (int i = 0; i < count; i++)
@@ -7131,7 +7118,7 @@ inline void RenderPlayersPanel()
             else
                 snprintf(subBuf, sizeof(subBuf), "-");
             DrawOutlinedText(dl, f, 12.0f, ImVec2(tx, cardY + 26.0f), TextDimU32(), col_outline, subBuf);
-            // Live stats for selected player: HP, state (idle/walking/running...), speed, tool, team, armor.
+
             float selHp = -1.0f, selMaxHp = 100.0f, selSpeed = -1.0f;
             std::string selState = "-";
             std::string selToolStr = "-";
@@ -7214,7 +7201,7 @@ inline void RenderPlayersPanel()
             float sy = cardY + 44.0f;
             float statW = rx - tx;
             if (statW < 60.0f) statW = 60.0f;
-            // HP & ARMOR
+
             {
                 char hpTxt[32];
                 float frac = -1.0f;
@@ -7241,7 +7228,7 @@ inline void RenderPlayersPanel()
                         dl->AddRectFilled(b0, ImVec2(b0.x + (b1.x - b0.x) * frac, b1.y), fc);
                 }
                 dl->AddRect(b0, b1, IM_COL32(0, 0, 0, 255));
-                // Armor bar right under health: blue when they have anything on (ForceField shield).
+
                 ImVec2 a0(tx, sy + 22.0f), a1(rx, sy + 28.0f);
                 dl->AddRectFilled(a0, a1, IM_COL32(12, 12, 14, 255));
                 if (selShield)
@@ -7254,7 +7241,7 @@ inline void RenderPlayersPanel()
                 }
                 sy += 44.0f;
             }
-            // State (+ speed)
+
             {
                 char stTxt[64];
                 if (selSpeed >= 0.0f && (selState == "Walking" || selState == "Running" || selState == "Idle"))
@@ -7266,14 +7253,14 @@ inline void RenderPlayersPanel()
                 DrawOutlinedText(dl, f, 12.0f, ImVec2(tx, sy + 11.0f), stCol, col_outline, stTxt);
                 sy += 27.0f;
             }
-            // Tool
+
             {
                 DrawOutlinedText(dl, f, 11.0f, ImVec2(tx, sy), TextDimU32(), col_outline, "TOOL");
                 std::string tv = trunc_stat(selToolStr, 18);
                 DrawOutlinedText(dl, f, 12.0f, ImVec2(tx, sy + 11.0f), TextU32(), col_outline, tv.c_str());
                 sy += 27.0f;
             }
-            // Team
+
             {
                 DrawOutlinedText(dl, f, 11.0f, ImVec2(tx, sy), TextDimU32(), col_outline, "TEAM");
                 std::string tv = trunc_stat(selTeamStr, 18);

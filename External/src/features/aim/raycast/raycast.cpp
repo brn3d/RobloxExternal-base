@@ -11,6 +11,7 @@
 #include "../health/health.h"
 #include "../distance/distance.h"
 #include "../../../utility/cache/cache.h"
+#include "../../../utility/logger/logger.h"
 #include "../../../utility/struct/world2screen.h"
 #include "../../../utility/struct/offsets.h"
 #include "../../../menu/overlay/settings.h"
@@ -20,6 +21,7 @@
 #include <cstring>
 #include <chrono>
 #include <cstddef>
+#include <mutex>
 #ifndef CFG_CALL_TARGET_VALID
 #define CFG_CALL_TARGET_VALID 0x00000001
 #endif
@@ -530,8 +532,23 @@ namespace thenwefuckin::aim::raycast
             }
             const auto now = std::chrono::steady_clock::now();
             if (g_lastFail.time_since_epoch().count() != 0 && now - g_lastFail < std::chrono::milliseconds(1500))
+            {
                 return false;
-            const std::uintptr_t slot = base + desc_rva_z + bound_fn_offset;
+            }
+            const std::uintptr_t desc = base + desc_rva_z;
+            const std::uintptr_t slot = desc + bound_fn_offset;
+            {
+                DWORD pdesc = query_protect(desc), pslot = query_protect(slot);
+                (void)pdesc; (void)pslot;
+                std::uintptr_t probe = 0;
+                bool canReadDesc = read_val(desc, &probe, sizeof(probe));
+                if (!canReadDesc)
+                {
+                    set_status("install: unreadable desc (offsets stale?)");
+                    g_lastFail = now;
+                    return false;
+                }
+            }
             const std::uintptr_t fn = g_proc->read<std::uintptr_t>(slot);
             if (!ok_addr(fn))
             {
@@ -539,8 +556,23 @@ namespace thenwefuckin::aim::raycast
                 g_lastFail = now;
                 return false;
             }
+            {
+                DWORD pfn = query_protect(fn);
+                (void)pfn;
+                std::uint8_t head[16] = {};
+                bool rh = read_val(fn, head, sizeof(head));
+                if (!rh)
+                {
+                    set_status("install: fn unreadable");
+                    g_lastFail = now;
+                    return false;
+                }
+            }
             if (!g_hook.state)
+            {
                 g_hook.state = ray_alloc(pg(), PAGE_READWRITE);
+            }
+            else
             if (!g_hook.state)
             {
                 set_status("install: no state mem");
@@ -571,6 +603,15 @@ namespace thenwefuckin::aim::raycast
                     ignore_cave = cand;
                     continue;
                 }
+
+                std::vector<std::uint8_t> back(thunk.size());
+                bool rb = read_val(cand, back.data(), back.size());
+                bool match = rb && memcmp(back.data(), thunk.data(), thunk.size()) == 0;
+                if (!match)
+                {
+                    ignore_cave = cand;
+                    continue;
+                }
                 stub = cand;
                 owned = false;
             }
@@ -585,6 +626,13 @@ namespace thenwefuckin::aim::raycast
                         ray_free(stub);
                         stub = 0;
                         owned = false;
+                    }
+                    else
+                    {
+                        std::vector<std::uint8_t> back(thunk.size());
+                        bool rb = read_val(stub, back.data(), back.size());
+                        bool match = rb && memcmp(back.data(), thunk.data(), thunk.size()) == 0;
+                        if (!match) { ray_free(stub); stub = 0; owned = false; }
                     }
                 }
             }
@@ -604,7 +652,7 @@ namespace thenwefuckin::aim::raycast
                 return false;
             }
             FlushInstructionCache(g_proc->raw(), reinterpret_cast<void*>(stub), thunk.size());
-            mark_cfg(stub);
+            bool cfg = mark_cfg(stub);
             const DWORD prot = query_protect(stub);
             if (!is_executable_protect(prot))
             {
@@ -615,7 +663,11 @@ namespace thenwefuckin::aim::raycast
                 return false;
             }
             protect_remote(slot, 8, PAGE_READWRITE, nullptr);
-            if (!write_protected(slot, &stub, sizeof(stub)) || g_proc->read<std::uintptr_t>(slot) != stub)
+            std::uintptr_t before = g_proc->read<std::uintptr_t>(slot);
+            (void)before;
+            bool wok = write_protected(slot, &stub, sizeof(stub));
+            std::uintptr_t after = g_proc->read<std::uintptr_t>(slot);
+            if (!wok || after != stub)
             {
                 set_status("install: slot patch fail");
                 g_lastFail = now;
@@ -634,17 +686,24 @@ namespace thenwefuckin::aim::raycast
         }
         void remove_hook()
         {
+            if (g_hook.installed && g_hook.state)
+            {
+                std::uint32_t v = 0;
+                w_mem(g_hook.state, &v, sizeof(v));
+                g_hook.active = false;
+                Sleep(150);
+            }
             if (g_hook.installed)
                 set_status("idle: hook removed");
             if (g_hook.installed && ok_addr(g_hook.originalFunction) && g_hook.module_base)
             {
                 const std::uintptr_t slot = g_hook.module_base + desc_rva_z + bound_fn_offset;
-                write_protected(slot, &g_hook.originalFunction, sizeof(g_hook.originalFunction));
-            }
-            if (g_hook.thunk && !g_hook.thunk_owned)
-            {
-                std::vector<std::uint8_t> pad(k_stub_bytes, 0xCC);
-                write_protected(g_hook.thunk, pad.data(), pad.size());
+                std::uintptr_t cur = g_proc ? g_proc->read<std::uintptr_t>(slot) : 0;
+                if (cur == g_hook.thunk)
+                {
+                    write_protected(slot, &g_hook.originalFunction, sizeof(g_hook.originalFunction));
+                    FlushInstructionCache(g_proc->raw(), reinterpret_cast<void*>(slot), 8);
+                }
             }
             if (g_hook.thunk && g_hook.thunk_owned)
                 ray_free(g_hook.thunk);
@@ -707,10 +766,15 @@ namespace thenwefuckin::aim::raycast
             const std::uint32_t flags = wallbang ? 1u : 0u;
             const float scale = 1.15f;
             const std::uint32_t one = 1;
-            w_mem(g_hook.state + offsetof(RaycastState, reserved), &flags, sizeof(flags));
-            w_mem(g_hook.state + offsetof(RaycastState, target_x), pos, sizeof(pos));
-            w_mem(g_hook.state + offsetof(RaycastState, scale), &scale, sizeof(scale));
-            w_mem(g_hook.state + offsetof(RaycastState, active), &one, sizeof(one));
+            bool ok1 = w_mem(g_hook.state + offsetof(RaycastState, reserved), &flags, sizeof(flags));
+            bool ok2 = w_mem(g_hook.state + offsetof(RaycastState, target_x), pos, sizeof(pos));
+            bool ok3 = w_mem(g_hook.state + offsetof(RaycastState, scale), &scale, sizeof(scale));
+            bool ok4 = w_mem(g_hook.state + offsetof(RaycastState, active), &one, sizeof(one));
+            if (!ok1 || !ok2 || !ok3 || !ok4)
+            {
+                remove_hook();
+                return;
+            }
             g_hook.active = true;
             g_wallbang = wallbang;
             set_status(wallbang ? "aiming: magic bullet (wallbang)" : "aiming: redirect active");
@@ -803,7 +867,7 @@ namespace thenwefuckin::aim::raycast
     }
     void idle()
     {
-        ensure_hook(false);
+        set_hook_active(false, math::vec3{}, false);
         s_targets.clear();
     }
     void on_game_joined()

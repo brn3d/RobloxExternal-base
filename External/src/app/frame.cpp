@@ -69,7 +69,7 @@ static bool NeedsGameData()
          || settings::hipheight_enabled
         || settings::infjump_enabled
         || settings::hitsound_enabled
-         || settings::time_enabled
+          || settings::time_enabled
          || settings::night_enabled
          || settings::ambient_enabled
          || settings::world_fog_enabled

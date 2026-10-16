@@ -1265,14 +1265,7 @@ float4 PS(Pin i) : SV_Target
             float ix = std::floor(x);
             float iy = std::floor(y);
             if (outline) {
-                static const ImVec2 offsets[8] = {
-                    ImVec2(-1.0f, -1.0f), ImVec2(0.0f, -1.0f), ImVec2(1.0f, -1.0f),
-                    ImVec2(-1.0f,  0.0f),                      ImVec2(1.0f,  0.0f),
-                    ImVec2(-1.0f,  1.0f), ImVec2(0.0f,  1.0f), ImVec2(1.0f,  1.0f)
-                };
-                for (int i = 0; i < 8; i++) {
-                    dl->AddText(font, fontSize, ImVec2(ix + offsets[i].x, iy + offsets[i].y), outlineCol, text);
-                }
+                dl->AddText(font, fontSize, ImVec2(ix + 1.0f, iy + 1.0f), outlineCol, text);
             }
             dl->AddText(font, fontSize, ImVec2(ix, iy), col, text);
         }
@@ -1933,8 +1926,7 @@ float4 PS(Pin i) : SV_Target
     }
     static void render_2d_fallback_with_esp(ImDrawList* dl, ImVec2 min, ImVec2 max, ID3D11ShaderResourceView* srv, int srvW, int srvH, const char* note)
     {
-        // Mirrors the local-player preview 2D fallback (render_backend else-branch):
-        // centered 2D avatar image (or dummy box) + full ESP overlay + status note.
+
         float vw = floorf(max.x - min.x);
         float vh = floorf(max.y - min.y);
         if (vw < 40.0f || vh < 40.0f)
@@ -2048,8 +2040,7 @@ float4 PS(Pin i) : SV_Target
             commit_meshes(dev);
         if (Menu::g_playerPreviewOpen)
         {
-            // Local preview owns the shared 3D state, so show 2D exactly like
-            // the local preview does (centered avatar + ESP overlay).
+
             ID3D11ShaderResourceView* srv = players::avatars::avatar_for((long long)uid);
             render_2d_fallback_with_esp(dl, min, max, srv, 1, 1, nullptr);
             return;
@@ -2074,8 +2065,7 @@ float4 PS(Pin i) : SV_Target
         bool modelShown = s.gfxReady && s.phase == Phase::Done && !s.meshes.empty() && s.srv;
         if (!modelShown)
         {
-            // Same 2D fallback as local preview: thumb (or headshot avatar)
-            // centered + ESP visuals + status note.
+
             ID3D11ShaderResourceView* srv = nullptr;
             int tw = 1, th = 1;
             const char* note = nullptr;
