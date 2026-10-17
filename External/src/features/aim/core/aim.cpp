@@ -276,8 +276,6 @@ namespace thenwefuckin::aim
             wraith::idle();
         if (settings::aim_method != 0)
             memory::clear();
-        if (settings::aim_method != 2 || !keyOn)
-            raycast::idle();
         if (settings::aim_method != 3 || !keyOn)
             wraith::idle();
         if (settings::aim_autoshoot)

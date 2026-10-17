@@ -21,8 +21,6 @@
 #include "../../../menu/resources/font.h"
 #include <vector>
 #include <chrono>
-#include <mutex>
-#include <unordered_map>
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -32,8 +30,6 @@ static constexpr float kStaticBoxAspect = 0.72f;
 static constexpr float kStaticBoxPadY   = 5.0f;
 namespace thenwefuckin::visual
 {
-    static std::unordered_map<uintptr_t, LimbCache> g_limb;
-    static std::mutex g_limbMtx;
     static inline void DrawVisualText(ImDrawList* dl, ImFont* font, float fontSize, float x, float y, ImU32 col, bool outline, ImU32 outlineCol, const char* text)
     {
         if (!dl || !text || !text[0]) return;
@@ -41,76 +37,9 @@ namespace thenwefuckin::visual
         float ix = std::floor(x);
         float iy = std::floor(y);
         if (outline) {
-            static const ImVec2 offsets[4] = {
-                ImVec2(-1.0f, -1.0f), ImVec2(1.0f, -1.0f),
-                ImVec2(-1.0f,  1.0f), ImVec2(1.0f,  1.0f)
-            };
-            for (int i = 0; i < 4; i++) {
-                dl->AddText(font, fontSize, ImVec2(ix + offsets[i].x, iy + offsets[i].y), outlineCol, text);
-            }
+            dl->AddText(font, fontSize, ImVec2(ix + 1.0f, iy + 1.0f), outlineCol, text);
         }
         dl->AddText(font, fontSize, ImVec2(ix, iy), col, text);
-    }
-    static inline uintptr_t getPrim(node c, const std::string& n)
-    {
-        node limb = c.find_child(n);
-        if (!limb) return 0;
-        return limb.primitive();
-    }
-    static inline math::vec3 getPos(uintptr_t prim)
-    {
-        if (!prim) return {};
-        return g_proc->read<math::vec3>(prim + Offsets::Primitive::Position);
-    }
-    static inline math::frame getFrame(uintptr_t prim)
-    {
-        if (!prim) return {};
-        return g_proc->read<math::frame>(prim + Offsets::Primitive::Rotation);
-    }
-    static inline void addJoint(std::vector<math::vec3>& out, const math::vec3& p, const math::vec3& root, float rx, float ry, float rz)
-    {
-        if (p.x == 0.0f && p.y == 0.0f && p.z == 0.0f) return;
-        if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) return;
-        if ((p - root).length() > 25.0f) return;
-        for (int x = -1; x <= 1; x += 2)
-            for (int y = -1; y <= 1; y += 2)
-                for (int z = -1; z <= 1; z += 2)
-                    out.push_back({ p.x + x * rx, p.y + y * ry, p.z + z * rz });
-    }
-    static inline void collectBoxPoints(const WorldCache& wc, std::vector<math::vec3>& pts)
-    {
-        if (wc.root.x == 0 && wc.root.y == 0 && wc.root.z == 0) return;
-        pts.reserve(128);
-        addJoint(pts, wc.root, wc.root, 1.0f, 1.0f, 0.6f);
-        if (wc.isR6)
-        {
-            addJoint(pts, wc.head, wc.root, 1.1f, 0.7f, 1.1f);
-            const math::vec3 torso = (wc.torso.x != 0.0f || wc.torso.y != 0.0f || wc.torso.z != 0.0f) ? wc.torso : wc.root;
-            addJoint(pts, torso, wc.root, 1.1f, 1.1f, 0.7f);
-            addJoint(pts, wc.leftArm, wc.root, 0.7f, 1.1f, 0.7f);
-            addJoint(pts, wc.rightArm, wc.root, 0.7f, 1.1f, 0.7f);
-            addJoint(pts, wc.leftLeg, wc.root, 0.7f, 1.1f, 0.7f);
-            addJoint(pts, wc.rightLeg, wc.root, 0.7f, 1.1f, 0.7f);
-        }
-        else
-        {
-            addJoint(pts, wc.head, wc.root, 0.8f, 0.7f, 0.8f);
-            const math::vec3 upper = (wc.upper.x != 0.0f || wc.upper.y != 0.0f || wc.upper.z != 0.0f) ? wc.upper : wc.torso;
-            addJoint(pts, upper, wc.root, 0.9f, 0.7f, 0.5f);
-            addJoint(pts, wc.lower, wc.root, 0.9f, 0.7f, 0.5f);
-            addJoint(pts, wc.leftUpperArm, wc.root, 0.4f, 0.5f, 0.4f);
-            addJoint(pts, wc.leftLowerArm, wc.root, 0.35f, 0.45f, 0.35f);
-            addJoint(pts, wc.leftHand, wc.root, 0.35f, 0.35f, 0.35f);
-            addJoint(pts, wc.rightUpperArm, wc.root, 0.4f, 0.5f, 0.4f);
-            addJoint(pts, wc.rightLowerArm, wc.root, 0.35f, 0.45f, 0.35f);
-            addJoint(pts, wc.rightHand, wc.root, 0.35f, 0.35f, 0.35f);
-            addJoint(pts, wc.leftUpperLeg, wc.root, 0.4f, 0.6f, 0.4f);
-            addJoint(pts, wc.leftLowerLeg, wc.root, 0.35f, 0.55f, 0.35f);
-            addJoint(pts, wc.leftFoot, wc.root, 0.35f, 0.3f, 0.5f);
-            addJoint(pts, wc.rightUpperLeg, wc.root, 0.4f, 0.6f, 0.4f);
-            addJoint(pts, wc.rightLowerLeg, wc.root, 0.35f, 0.55f, 0.35f);
-            addJoint(pts, wc.rightFoot, wc.root, 0.35f, 0.3f, 0.5f);
-        }
     }
     static inline data::rect projectBoxPoints(const std::vector<math::vec3>& pts, const math::view_matrix& view, float screenW, float screenH, const math::vec3& camPos)
     {
@@ -142,139 +71,11 @@ namespace thenwefuckin::visual
         data::rect rc{}; rc.x0=minX; rc.y0=minY; rc.x1=maxX; rc.y1=maxY;
         return rc;
     }
-    static std::vector<WorldCache> g_world;
-    static std::chrono::steady_clock::time_point g_last;
-    static math::view_matrix g_viewCache{};
-    static bool g_viewValid = false;
-
-    struct DynRectState { data::rect rc; std::chrono::steady_clock::time_point t{}; };
-    static std::unordered_map<uintptr_t, DynRectState> s_dynRect;
-    static std::unordered_map<uintptr_t, std::string> g_nameCache;
-    static std::mutex g_nameMtx;
-    static inline math::view_matrix fetchView()
-    {
-        uint64_t vis = g_proc->read<uint64_t>(g_proc->base() + Offsets::VisualEngine::Pointer);
-        if (!vis) return g_ctx.view;
-        return g_proc->read<math::view_matrix>(vis + Offsets::VisualEngine::ViewMatrix);
-    }
-    static void build_pf_world(std::vector<WorldCache>& out, float fw, float fh)
-    {
-        out.clear();
-        if (PfCache::players.empty())
-            return;
-        bool needSkel = settings::skeleton_enabled;
-        bool need3d = (settings::box_mode == 1);
-        bool needLimbs = needSkel || need3d;
-        static std::unordered_map<uintptr_t, std::string> s_teamNames;
-        for (auto& pp : PfCache::players)
-        {
-            if (!pp.isValid)
-                continue;
-            if (pp.modelAddr == PfCache::localCharacterAddr)
-                continue;
-            if (pp.health <= 0.0f)
-                continue;
-            if (settings::vis_team_check && PfCache::IsTeammate(pp))
-                continue;
-            WorldCache wc{};
-            wc.playerAddr = pp.modelAddr;
-            node headNode{ pp.headAddr };
-            node torsoNode{ pp.torsoAddr };
-            uintptr_t headPrim = headNode ? headNode.primitive() : 0;
-            uintptr_t torsoPrim = torsoNode ? torsoNode.primitive() : 0;
-            if (!headPrim)
-                continue;
-            wc.head = getPos(headPrim);
-            if (wc.head.x == 0 && wc.head.y == 0 && wc.head.z == 0)
-                continue;
-            wc.root = torsoPrim ? getPos(torsoPrim) : math::vec3{};
-            if ((wc.root.x == 0 && wc.root.y == 0 && wc.root.z == 0) || (wc.head - wc.root).length() > 25.0f)
-                wc.root = math::vec3{ wc.head.x, wc.head.y - 2.5f, wc.head.z };
-            wc.hp = pp.health * 100.0f;
-            wc.maxHp = 100.0f;
-            wc.name = pp.name;
-            if (settings::flags_enabled && settings::flags_team && pp.teamFolderAddr)
-            {
-                std::lock_guard<std::mutex> lk(g_nameMtx);
-                auto tit = s_teamNames.find(pp.teamFolderAddr);
-                if (tit != s_teamNames.end())
-                    wc.team = tit->second;
-                else
-                {
-                    wc.team = node{ pp.teamFolderAddr }.name();
-                    s_teamNames[pp.teamFolderAddr] = wc.team;
-                }
-            }
-            wc.valid = true;
-            wc.isR6 = true;
-            LimbCache lc{};
-            lc.characterAddr = pp.modelAddr;
-            lc.isR6 = true;
-            lc.headPrim = headPrim;
-            lc.rootPrim = torsoPrim ? torsoPrim : headPrim;
-            lc.torsoPrim = torsoPrim;
-            auto safePos = [&](uintptr_t prim, float maxDist) -> math::vec3 {
-                if (!prim) return {};
-                math::vec3 p = getPos(prim);
-                if (p.x == 0 && p.y == 0 && p.z == 0) return {};
-                if ((p - wc.root).length() > maxDist) return {};
-                return p;
-            };
-            if (needLimbs)
-            {
-                std::vector<uintptr_t> lprims;
-                lprims.reserve(pp.limbAddrs.size());
-                for (auto la : pp.limbAddrs)
-                {
-                    node ln{ la };
-                    uintptr_t prim = ln ? ln.primitive() : 0;
-                    if (prim) lprims.push_back(prim);
-                }
-                uintptr_t laArm = lprims.size() > 0 ? lprims[0] : 0;
-                uintptr_t raArm = lprims.size() > 1 ? lprims[1] : 0;
-                uintptr_t laLeg = lprims.size() > 2 ? lprims[2] : 0;
-                uintptr_t raLeg = lprims.size() > 3 ? lprims[3] : 0;
-                lc.leftArmPrim = laArm;
-                lc.rightArmPrim = raArm;
-                lc.leftLegPrim = laLeg;
-                lc.rightLegPrim = raLeg;
-                wc.torso = safePos(torsoPrim, 15.0f);
-                wc.leftArm = safePos(laArm, 20.0f);
-                wc.rightArm = safePos(raArm, 20.0f);
-                wc.leftLeg = safePos(laLeg, 20.0f);
-                wc.rightLeg = safePos(raLeg, 20.0f);
-            }
-            else
-            {
-                wc.torso = safePos(torsoPrim, 15.0f);
-            }
-            wc.lc = lc;
-            if (need3d && lc.headPrim)
-            {
-                std::vector<math::vec3> pts;
-                pts.reserve(200);
-                collectBoxPoints(wc, pts);
-                if (!pts.empty())
-                {
-                    wc.pts3d = std::move(pts);
-                    wc.hasPts3d = true;
-                }
-            }
-            out.push_back(std::move(wc));
-        }
-    }
     void on_game_joined()
     {
-        std::lock_guard<std::mutex> lk(g_limbMtx);
-        g_limb.clear();
-        std::lock_guard<std::mutex> nlk(g_nameMtx);
-        g_nameCache.clear();
+        wcache::clear();
         pcache::clear();
         PfCache::on_game_joined();
-        g_world.clear();
-        g_last = std::chrono::steady_clock::time_point{};
-        g_viewCache = math::view_matrix{};
-        g_viewValid = false;
         thenwefuckin::aim::on_game_joined();
         ore::clear();
         plants::clear();
@@ -367,153 +168,16 @@ namespace thenwefuckin::visual
             }
         }
         if (!g_ctx.ready) return;
-        bool any_flags = settings::flags_enabled && (settings::flags_team || settings::flags_state || settings::flags_health);
-        if (!settings::box_enabled && !settings::skeleton_enabled && !settings::health_enabled && !settings::name_enabled && !settings::headdot_enabled && !settings::distance_enabled && !settings::tool_enabled && !any_flags && !settings::tracer_enabled && !settings::oof_enabled && !settings::aim_tracer && !settings::aim_enabled && !settings::aim_autoshoot) return;
         float fw = (float)w;
         float fh = (float)h;
         auto now = std::chrono::steady_clock::now();
-        bool need = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_last).count() > 33;
-        bool needSkel = settings::skeleton_enabled;
-        bool need3dBox = (settings::box_mode == 1);
-        bool needFullLimbs = needSkel || need3dBox;
-        static bool s_pfMode = false;
-        static std::chrono::steady_clock::time_point s_pfCheck{};
-        if (now - s_pfCheck > std::chrono::milliseconds(2000))
-        {
-            s_pfCheck = now;
-            s_pfMode = PfCache::IsActivePlace();
-        }
-        if (g_proc && g_proc->connected())
-        {
-            g_viewCache = fetchView();
-            g_viewValid = true;
-        }
-        if (need)
-        {
-            uintptr_t localTeamAddr = 0;
-            if (settings::vis_team_check && g_ctx.local_player.addr)
-                localTeamAddr = g_proc->read<uintptr_t>(g_ctx.local_player.addr + Offsets::Player::Team);
-            std::vector<WorldCache> next;
-            if (s_pfMode)
-            {
-                build_pf_world(next, fw, fh);
-            }
-            else
-            {
-            pcache::update();
-            std::vector<pcache::Entry> snapshot;
-            {
-                std::lock_guard<std::mutex> lk(pcache::mtx);
-                snapshot = pcache::entries;
-            }
-            next.reserve(snapshot.size());
-            for (auto& pe : snapshot)
-            {
-                WorldCache wc{};
-                wc.playerAddr = pe.player;
-                if (pe.player == g_ctx.local_player.addr) { next.push_back(std::move(wc)); continue; }
-                if (settings::vis_team_check && localTeamAddr && pe.team && pe.team == localTeamAddr) { next.push_back(std::move(wc)); continue; }
-                if (pe.hp <= 0.f) { next.push_back(std::move(wc)); continue; }
-                wc.hp = pe.hp;
-                wc.maxHp = pe.maxHp > 0 ? pe.maxHp : 100.f;
-                wc.name = pe.name;
-                if (settings::tool_enabled)
-                    wc.tool = pe.tool;
-                if (settings::flags_enabled && settings::flags_team)
-                    wc.team = pe.teamStr;
-                LimbCache lc = pe.lc;
-                if (lc.headPrim == 0) { next.push_back(std::move(wc)); continue; }
-                wc.head = getPos(lc.headPrim);
-                if (wc.head.x == 0 && wc.head.y == 0 && wc.head.z == 0) { next.push_back(wc); continue; }
-                wc.root = lc.rootPrim ? getPos(lc.rootPrim) : math::vec3{};
-                float drop = lc.isR6 ? 3.0f : 2.5f;
-                if ((wc.root.x == 0 && wc.root.y == 0 && wc.root.z == 0) || (wc.head - wc.root).length() > 25.0f)
-                {
-                    wc.root = math::vec3{ wc.head.x, wc.head.y - drop, wc.head.z };
-                }
-                if (settings::flags_enabled && settings::flags_state && pe.humanoid)
-                {
-                    uintptr_t seat = g_proc->read<uintptr_t>(pe.humanoid + Offsets::Humanoid::SeatPart);
-                    uint8_t plat = g_proc->read<uint8_t>(pe.humanoid + Offsets::Humanoid::PlatformStand);
-                    if (seat != 0)
-                        wc.state = "Seated";
-                    else if (plat != 0)
-                        wc.state = "Platform";
-                    else
-                    {
-                        math::vec3 vel{};
-                        if (lc.rootPrim)
-                            vel = g_proc->read<math::vec3>(lc.rootPrim + Offsets::Primitive::AssemblyLinearVelocity);
-                        float hSpeed = sqrtf(vel.x * vel.x + vel.z * vel.z);
-                        if (fabsf(vel.y) > 8.0f)
-                            wc.state = vel.y > 0.0f ? "Jumping" : "Falling";
-                        else if (hSpeed > 4.0f)
-                            wc.state = "Moving";
-                        else
-                            wc.state = "Standing";
-                    }
-                }
-                wc.valid = true;
-                wc.isR6 = lc.isR6;
-                auto safePos = [&](uintptr_t prim, float maxDist) -> math::vec3 {
-                    if (!prim) return {};
-                    math::vec3 p = getPos(prim);
-                    if (p.x == 0 && p.y == 0 && p.z == 0) return {};
-                    if ((p - wc.root).length() > maxDist) return {};
-                    return p;
-                };
-                if (lc.isR6)
-                {
-                    wc.torso = safePos(lc.torsoPrim, 15.0f);
-                    wc.leftArm = safePos(lc.leftArmPrim, 20.0f);
-                    wc.rightArm = safePos(lc.rightArmPrim, 20.0f);
-                    wc.leftLeg = safePos(lc.leftLegPrim, 20.0f);
-                    wc.rightLeg = safePos(lc.rightLegPrim, 20.0f);
-                }
-                else
-                {
-                    wc.upper = safePos(lc.upperPrim, 15.0f);
-                    wc.lower = safePos(lc.lowerPrim, 15.0f);
-                    wc.hasLower = lc.lowerPrim != 0 && (wc.lower.x != 0 || wc.lower.y != 0 || wc.lower.z != 0);
-                    wc.leftUpperArm = safePos(lc.leftUpperArmPrim, 20.0f);
-                    wc.leftLowerArm = safePos(lc.leftLowerArmPrim, 20.0f);
-                    wc.leftHand = safePos(lc.leftHandPrim, 25.0f);
-                    wc.rightUpperArm = safePos(lc.rightUpperArmPrim, 20.0f);
-                    wc.rightLowerArm = safePos(lc.rightLowerArmPrim, 20.0f);
-                    wc.rightHand = safePos(lc.rightHandPrim, 25.0f);
-                    wc.leftUpperLeg = safePos(lc.leftUpperLegPrim, 20.0f);
-                    wc.leftLowerLeg = safePos(lc.leftLowerLegPrim, 20.0f);
-                    wc.leftFoot = safePos(lc.leftFootPrim, 25.0f);
-                    wc.rightUpperLeg = safePos(lc.rightUpperLegPrim, 20.0f);
-                    wc.rightLowerLeg = safePos(lc.rightLowerLegPrim, 20.0f);
-                    wc.rightFoot = safePos(lc.rightFootPrim, 25.0f);
-                    wc.torso = wc.upper;
-                }
-                wc.lc = lc;
-                if (needSkel && lc.isR6 && lc.torsoPrim)
-                {
-                    auto tf = getFrame(lc.torsoPrim);
-                    if (!(tf.pos.x == 0 && tf.pos.y == 0 && tf.pos.z == 0) && (tf.pos - wc.root).length() <= 6.0f)
-                    {
-                        wc.torsoFrame = tf;
-                        wc.hasTorsoFrame = true;
-                    }
-                }
-                if (need3dBox && lc.headPrim)
-                {
-                    std::vector<math::vec3> pts;
-                    pts.reserve(200);
-                    collectBoxPoints(wc, pts);
-                    if (!pts.empty()) { wc.pts3d = std::move(pts); wc.hasPts3d = true; }
-                }
-                next.push_back(std::move(wc));
-            }
-            }
-            g_world.swap(next);
-            g_last = now;
-        }
-        if (!g_viewValid) return;
-        const math::view_matrix& view = g_viewCache;
+
+        wcache::update(fw, fh);
+        bool any_flags = settings::flags_enabled && (settings::flags_team || settings::flags_state || settings::flags_health);
+        if (!settings::box_enabled && !settings::skeleton_enabled && !settings::health_enabled && !settings::name_enabled && !settings::headdot_enabled && !settings::distance_enabled && !settings::tool_enabled && !any_flags && !settings::tracer_enabled && !settings::oof_enabled && !settings::aim_tracer && !settings::aim_enabled && !settings::aim_autoshoot) return;
+        if (!wcache::viewValid) return;
+        const math::view_matrix& view = wcache::view;
+        const math::vec3& camPos = wcache::camPos;
         ImU32 boxCol = 0, boxOutlineCol = 0, boxFill1 = 0, boxFill2 = 0;
         if (settings::box_enabled)
         {
@@ -532,74 +196,20 @@ namespace thenwefuckin::visual
             skelOutlineCol = ImGui::ColorConvertFloat4ToU32(ImVec4(settings::skeleton_outline_color[0], settings::skeleton_outline_color[1], settings::skeleton_outline_color[2], 1.0f));
         }
         ImFont* verdana = g_verdanaFont ? g_verdanaFont : ImGui::GetFont();
-        math::vec3 camPos{};
-        if (g_ctx.camera)
-            camPos = g_proc->read<math::vec3>(g_ctx.camera.addr + Offsets::Camera::Position);
-
-        {
-            static math::vec3 s_prevCamFwd{};
-            static bool s_havePrevCamFwd = false;
-            math::vec3 fwd{};
-            if (g_ctx.camera)
-            {
-                math::frame cf = g_proc->read<math::frame>(g_ctx.camera.addr + Offsets::Camera::Rotation);
-                fwd = math::vec3{ -cf.rot[2], -cf.rot[5], -cf.rot[8] };
-                float fl = fwd.length();
-                if (fl > 0.000001f)
-                    fwd = fwd / fl;
-                else
-                    fwd = math::vec3{};
-            }
-            if (fwd.x != 0.0f || fwd.y != 0.0f || fwd.z != 0.0f)
-            {
-                if (s_havePrevCamFwd)
-                {
-                    float d = s_prevCamFwd.dot(fwd);
-                    if (d < 0.996f)
-                        s_dynRect.clear();
-                }
-                s_prevCamFwd = fwd;
-                s_havePrevCamFwd = true;
-            }
-            else
-            {
-                s_havePrevCamFwd = false;
-            }
-        }
-
-        if (s_dynRect.size() > 64)
-        {
-            for (auto it = s_dynRect.begin(); it != s_dynRect.end();)
-            {
-                if (now - it->second.t > std::chrono::seconds(5))
-                    it = s_dynRect.erase(it);
-                else
-                    ++it;
-            }
-        }
-        for (auto& wc : g_world)
+        for (auto& wc : wcache::entries)
         {
             if (!wc.valid) continue;
             data::rect rc{};
             if (thenwefuckin::settings::box_mode == 1 && wc.hasPts3d && !wc.pts3d.empty()) {
                 data::rect dyn = projectBoxPoints(wc.pts3d, view, fw, fh, camPos);
-                auto dit = s_dynRect.find(wc.playerAddr);
-                bool havePrev = (dit != s_dynRect.end()) &&
+                auto dit = wcache::dynRect.find(wc.playerAddr);
+                bool havePrev = (dit != wcache::dynRect.end()) &&
                     (now - dit->second.t < std::chrono::milliseconds(250)) &&
                     !dit->second.rc.empty();
                 if (!dyn.empty()) {
-                    if (havePrev) {
 
-                        const data::rect& pr = dit->second.rc;
-                        rc.x0 = pr.x0 + (dyn.x0 - pr.x0) * 0.8f;
-                        rc.y0 = pr.y0 + (dyn.y0 - pr.y0) * 0.8f;
-                        rc.x1 = pr.x1 + (dyn.x1 - pr.x1) * 0.8f;
-                        rc.y1 = pr.y1 + (dyn.y1 - pr.y1) * 0.8f;
-                        if (rc.empty()) rc = dyn;
-                    } else {
-                        rc = dyn;
-                    }
-                    s_dynRect[wc.playerAddr] = DynRectState{ rc, now };
+                    rc = dyn;
+                    wcache::dynRect[wc.playerAddr] = wcache::DynRectState{ rc, now };
                 } else if (havePrev) {
 
                     rc = dit->second.rc;
@@ -907,7 +517,7 @@ namespace thenwefuckin::visual
                     DrawVisualText(dl, f, fs, tx, ty, dc, true, IM_COL32(0,0,0,255), buf);
                 }
             };
-            for (auto& wc2 : g_world) {
+            for (auto& wc2 : wcache::entries) {
                 math::vec2 sp; bool on = projection::to_screen(wc2.head, view, fw, fh, sp);
                 bool off = !on || sp.x < 0 || sp.x > w || sp.y < 0 || sp.y > h || !wc2.valid;
                 if (!off) continue;

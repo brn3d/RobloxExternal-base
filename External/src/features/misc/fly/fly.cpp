@@ -1,6 +1,7 @@
 #include "fly.h"
 #include "../../../utility/cache/cache.h"
 #include "../../../utility/global/globals.h"
+#include "../../../utility/logger/logger.h"
 #include "../../../menu/overlay/settings.h"
 #include "../../../menu/core/gui/menu.h"
 #include <Windows.h>
@@ -19,6 +20,7 @@ namespace thenwefuckin::misc::fly
         bool s_speedPinned = false;
         math::vec3 s_holdPos{};
         bool s_haveHold = false;
+        uint64_t s_tick = 0;
 
         void set_collide(const node& character, bool collide)
         {
@@ -93,10 +95,19 @@ namespace thenwefuckin::misc::fly
                 s_savedWalkSpeedCheck = (wsc > 0.0f && wsc <= 500.0f) ? wsc : s_savedWalkSpeed;
                 s_speedHum = humanoid.addr;
                 s_speedPinned = true;
+                g_proc->write<float>(humanoid.addr + Offsets::Humanoid::WalkSpeed, 0.0f);
+                g_proc->write<float>(humanoid.addr + Offsets::Humanoid::WalkSpeedCheck, 0.0f);
             }
-            // Keep the humanoid controller from fighting our velocity writes.
-            g_proc->write<float>(humanoid.addr + Offsets::Humanoid::WalkSpeed, 0.0f);
-            g_proc->write<float>(humanoid.addr + Offsets::Humanoid::WalkSpeedCheck, 0.0f);
+            else if ((s_tick & 31) == 0)
+            {
+
+                float cur = g_proc->read<float>(humanoid.addr + Offsets::Humanoid::WalkSpeed);
+                if (cur != 0.0f)
+                {
+                    g_proc->write<float>(humanoid.addr + Offsets::Humanoid::WalkSpeed, 0.0f);
+                    g_proc->write<float>(humanoid.addr + Offsets::Humanoid::WalkSpeedCheck, 0.0f);
+                }
+            }
         }
     }
 
@@ -129,6 +140,8 @@ namespace thenwefuckin::misc::fly
             node root = g_ctx.local_root;
             if (root)
                 stop_motion(root.primitive());
+            if (s_wasEnabled)
+                LOG("fly", "disabled");
             s_wasEnabled = false;
             s_haveHold = false;
             return;
@@ -159,6 +172,7 @@ namespace thenwefuckin::misc::fly
             if (dt <= 0.0f) dt = 0.000001f;
         }
         s_lastTick = now;
+        ++s_tick;
 
         node root = g_ctx.local_root;
         uintptr_t prim = root.primitive();
@@ -171,8 +185,6 @@ namespace thenwefuckin::misc::fly
             s_haveHold = false;
         }
 
-        // NOTE: no collision changes here - fly must not noclip. If you want to
-        // pass through walls, use the separate noclip feature.
         math::frame cf = g_proc->read<math::frame>(g_ctx.camera.addr + Offsets::Camera::Rotation);
         math::vec3 forward{ -cf.rot[2], -cf.rot[5], -cf.rot[8] };
         math::vec3 right{ cf.rot[0], cf.rot[3], cf.rot[6] };
@@ -202,7 +214,7 @@ namespace thenwefuckin::misc::fly
         math::vec3 move = forward * fwdIn + right * sideIn + worldUp * upIn;
         if (move.length() > 0.000001f)
         {
-            // Flying: position + matching velocity, no anchor juggling.
+
             s_haveHold = false;
             move = move.normalized();
             math::vec3 newPos = curPos + move * (speed * dt);
@@ -213,9 +225,7 @@ namespace thenwefuckin::misc::fly
         }
         else
         {
-            // Hovering still: hard position-lock to the latched spot with
-            // velocity pinned at zero. Anchor-only hover slowly sinks because
-            // the game clears externally-written anchor flags on its own.
+
             if (!s_haveHold)
             {
                 if (curPos.x == 0.0f && curPos.y == 0.0f && curPos.z == 0.0f)
@@ -226,6 +236,8 @@ namespace thenwefuckin::misc::fly
             g_proc->write<math::vec3>(prim + Offsets::Primitive::Position, s_holdPos);
             stop_motion(prim);
         }
+        if (!s_wasEnabled)
+            LOG("fly", "enabled");
         s_wasEnabled = true;
     }
 }

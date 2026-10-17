@@ -267,8 +267,11 @@ namespace thenwefuckin::worldgeo
         }
         if (!want_show() || !g_ctx.camera)
             return;
-        math::view_matrix view{};
-        if (!world::fetch_view(view))
+
+        math::view_matrix view = thenwefuckin::visual::wcache::viewValid
+            ? thenwefuckin::visual::wcache::view
+            : math::view_matrix{};
+        if (!thenwefuckin::visual::wcache::viewValid && !world::fetch_view(view))
             return;
         math::vec3 camPos = g_proc->read<math::vec3>(g_ctx.camera.addr + Offsets::Camera::Position);
         if (camPos.x == 0.0f && camPos.y == 0.0f && camPos.z == 0.0f)
